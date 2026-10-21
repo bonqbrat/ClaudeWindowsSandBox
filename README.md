@@ -1,7 +1,10 @@
 # Development Environment in Windows Sandbox
 
-Portable tools (Git, Node.js, Angular CLI, VS Code, Claude Code, Python, .NET SDK 8 and 10) running
-in an isolated Windows Sandbox. Projects from the host (e.g., `C:\_Projects`) are cloned into the Sandbox, and after work is done,
+This package contains powershell scripts that download and configure environment for C# and Angular programming tools 
+with Claude Code in an isolated Windows Sandbox.
+Portable tools (Git, Node.js, Angular CLI, VS Code, Claude Code, Python, .NET SDK 8 and 10) are installed as portable on your host and are running
+in an isolated Windows Sandbox (Sandbox loses all data after closing, so we keep them on your host).
+Projects from the host (e.g., `C:\_Projects`) are cloned into the Sandbox, and after work is done,
 commits and uncommitted changes return to the original repository via `git fetch` from a bundle file.
 
 > In the examples, the environment folder is `E:\SandBox`. It can be located anywhere – the scripts automatically determine
@@ -20,7 +23,7 @@ approx. 4 GB of disk space. There is no need to install Git, Node.js, or anythin
 Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
 ```
 
-**2. Extract the package** `DevSandbox-<date>.zip` e.g., to the `E:` drive – this will create the `E:\SandBox` folder.
+**2. Extract the package** Clone this repository or unpack `DevSandbox-<date>.zip` (if you got dist package) e.g., to the `E:` drive – this will create the `E:\SandBox` folder.
 
 **3. Allow script execution** (one-time, regular PowerShell, only for your account):
 
@@ -28,7 +31,7 @@ Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
-> If company policy does not allow this, run scripts via
+> If your policy does not allow this, run scripts via
 > `powershell -ExecutionPolicy Bypass -File E:\SandBox\<script>.ps1 <parameters>`.
 
 **4. Install tools** (downloads approx. 1 GB, takes a few to several minutes):
@@ -37,7 +40,7 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 powershell -ExecutionPolicy Bypass -File E:\SandBox\Install-SandboxTools.ps1
 ```
 
-**5. Clone a project** to the Sandbox:
+**5. Clone your project** to the Sandbox:
 
 ```powershell
 E:\SandBox\Copy-ProjectToSandbox.ps1 C:\_Projects\SampleMicroService
