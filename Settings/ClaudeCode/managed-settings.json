@@ -1,0 +1,81 @@
+{
+  "effortLevel": "high",
+  "theme": "dark",
+  "model": "opus",
+  "permissions": {
+    "deny": [
+      "Bash(gh pr create:*)",
+      "Bash(glab mr create:*)",
+      "Bash(az repos pr create:*)",
+      "Bash(git push * release*)",
+      "Bash(git push *:release*)",
+      "PowerShell(gh pr create:*)",
+      "PowerShell(glab mr create:*)",
+      "PowerShell(git push * release*)",
+      "Edit(//c/Windows/**)",
+      "Edit(//c/Program Files/**)",
+      "Edit(//c/Program Files (x86)/**)",
+      "Edit(//c/ProgramData/**)",
+      "Edit(~/.claude/settings.json)",
+      "Edit(~/.claude/settings.local.json)",
+      "Edit(~/.claude/CLAUDE.md)",
+      "Edit(~/.claude/hooks/**)",
+      "Edit(~/.claude.json)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "PowerShell(git push:*)",
+      "Bash(npm install:*)",
+      "Bash(npx:*)",
+      "Bash(pip install:*)",
+      "Bash(winget:*)",
+      "Bash(choco:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "PowerShell(Invoke-WebRequest:*)",
+      "PowerShell(Invoke-RestMethod:*)",
+      "WebFetch",
+      "WebSearch",
+      "Read(**/.env*)",
+      "Read(**/.ssh/**)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.pfx)",
+      "Read(**/.credentials.json)",
+      "Read(**/.git-credentials)"
+    ]
+  },
+  "autoMode": {
+    "hard_deny": [
+      "$defaults",
+      "Creating git commits, merges, rebases or cherry-picks on any branch whose name contains 'release'.",
+      "Pushing or merging anything into a branch whose name contains 'release'.",
+      "Creating merge requests or pull requests (gh pr create, glab mr create, API calls, push options).",
+      "Editing operating-system functions or settings: registry, services, scheduled tasks, firewall, users, execution policy, system directories.",
+      "Deleting or modifying any data on remote resources or network drives (UNC paths, mapped network drives, SSH/SFTP/SCP targets, cloud storage, remote repositories)."
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Any git push, even to non-release branches, without the user's explicit confirmation in this conversation.",
+      "Installing applications or packages, or downloading and running scripts from the internet, without explicit user confirmation.",
+      "Reading or printing passwords, keys, tokens, credentials or other security secrets without explicit user confirmation.",
+      "Sending any data to the internet (HTTP requests, uploads, web searches, publishing, external MCP services) without explicit user confirmation."
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/SandBox/Tools/Python/python.exe",
+            "args": ["C:/Program Files/ClaudeCode/hooks/guard.py"],
+            "timeout": 15,
+            "statusMessage": "Sprawdzanie reguł bezpieczeństwa..."
+          }
+        ]
+      }
+    ]
+  }
+}

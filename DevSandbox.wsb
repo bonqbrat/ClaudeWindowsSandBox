@@ -1,0 +1,40 @@
+<Configuration>
+  <vGPU>Enable</vGPU>
+  <Networking>Enable</Networking>
+  <MemoryInMB>12288</MemoryInMB>
+  <ClipboardRedirection>Enable</ClipboardRedirection>
+  <AudioInput>Disable</AudioInput>
+  <VideoInput>Disable</VideoInput>
+  <PrinterRedirection>Disable</PrinterRedirection>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>E:\SandBox\Tools</HostFolder>
+      <SandboxFolder>C:\SandBox\Tools</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>E:\SandBox\Scripts</HostFolder>
+      <SandboxFolder>C:\SandBox\Scripts</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <!-- Managed settings i hooki Claude Code: najwyzszy priorytet, Sandbox nie moze ich zmienic -->
+      <HostFolder>E:\SandBox\Settings\ClaudeCode</HostFolder>
+      <SandboxFolder>C:\Program Files\ClaudeCode</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>E:\SandBox\Home</HostFolder>
+      <SandboxFolder>C:\SandBox\Home</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>E:\SandBox\Projects</HostFolder>
+      <SandboxFolder>C:\SandBox\Projects</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\SandBox\Scripts\Start-Sandbox.ps1</Command>
+  </LogonCommand>
+</Configuration>
