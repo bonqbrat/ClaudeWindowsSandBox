@@ -11,8 +11,9 @@ commits and uncommitted changes return to the original repository via `git fetch
 > their location, and `Install-SandboxTools.ps1` adjusts the paths in `DevSandbox.wsb`.
 
 
-All code is offered as-is with no guarantees. Nothing in this project should be considered production-ready or used in production/critical environments without your extensive testing and validation.
 ---
+All code is offered as-is with no guarantees. Nothing in this project should be considered production-ready or used in production/critical environments without your extensive testing and validation.
+
 
 ## Quick start
 
