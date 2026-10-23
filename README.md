@@ -10,6 +10,8 @@ commits and uncommitted changes return to the original repository via `git fetch
 > In the examples, the environment folder is `E:\SandBox`. It can be located anywhere – the scripts automatically determine
 > their location, and `Install-SandboxTools.ps1` adjusts the paths in `DevSandbox.wsb`.
 
+
+All code is offered as-is with no guarantees. Nothing in this project should be considered production-ready or used in production/critical environments without your extensive testing and validation.
 ---
 
 ## Quick start
