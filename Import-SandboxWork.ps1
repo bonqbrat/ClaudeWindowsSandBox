@@ -11,7 +11,10 @@
       2. (opcjonalnie, -FastForward) przesuwa biezaca galaz do commitow z Sandboxa,
       3. naklada niezatwierdzone zmiany z Sandboxa (git apply) na katalog roboczy celu
          - wczesniej pokazuje liste plikow i prosi o potwierdzenie,
-         - wlasne niezatwierdzone zmiany celu zapisuje jako kopie refs/sandbox/backup/<data>.
+         - wlasne niezatwierdzone zmiany celu zapisuje jako kopie refs/sandbox/backup/<data>,
+      4. po udanym nalozeniu usuwa pomocnicze refs/sandbox/head i refs/sandbox/wip, zeby migawka
+         nie byla widoczna w historii (np. jako "galaz" sandbox/wip w Git Extensions / VS Code).
+         Zostaja, gdy zmiany nie zostaly nalozone (-NoApply, odmowa, konflikt) - mozna z nich pobrac pliki.
 
     Skrypt nie uruchamia gita w repozytorium zmodyfikowanym w Sandboxie - czyta tylko plik bundle.
 
@@ -110,6 +113,14 @@ if ($LASTEXITCODE -ne 0) { $tBranch = $null }
 
 Write-Host "Galaz w Sandboxie: $(if ($sbBranch) { $sbBranch } else { '?' }), w celu: $(if ($tBranch) { $tBranch } else { '(odlaczony HEAD)' })"
 
+# Pomocnicze refy migawki - usuwane, gdy nie sa juz potrzebne (inaczej narzedzia Git pokazuja
+# migawke jako osobna galaz z niezatwierdzonymi zmianami). Obiekty i tak zostaja w reflogu/bazie do gc.
+function Remove-SandboxRefs {
+    foreach ($ref in 'refs/sandbox/wip', 'refs/sandbox/head') {
+        & $Git -C $Target update-ref -d $ref 2>$null
+    }
+}
+
 # --- 2. Commity z Sandboxa -----------------------------------------------------------------
 if ($sbHead -ne $tHead) {
     & $Git -C $Target merge-base --is-ancestor $tHead $sbHead
@@ -134,7 +145,7 @@ if ($sbHead -ne $tHead) {
 
 # --- 3. Niezatwierdzone zmiany -------------------------------------------------------------
 if ($NoApply) { Write-Host "`nPominieto nakladanie zmian (-NoApply). Migawka: refs/sandbox/wip"; return }
-if ($wip -eq $sbHead) { Write-Host "`nW Sandboxie nie bylo niezatwierdzonych zmian." -ForegroundColor Green; return }
+if ($wip -eq $sbHead) { Remove-SandboxRefs; Write-Host "`nW Sandboxie nie bylo niezatwierdzonych zmian." -ForegroundColor Green; return }
 
 Write-Host "`nNiezatwierdzone zmiany z Sandboxa:" -ForegroundColor Cyan
 Invoke-Git -C $Target diff --stat --no-color --no-ext-diff $sbHead $wip | ForEach-Object { Write-Host "  $_" }
@@ -160,6 +171,7 @@ try {
     & $Git -C $Target apply --check $patch
     if ($LASTEXITCODE -eq 0) {
         Invoke-Git -C $Target apply $patch
+        Remove-SandboxRefs
         Write-Host "`nZmiany nalozone na katalog roboczy (nic nie zostalo zacommitowane)." -ForegroundColor Green
     } elseif ($ThreeWay) {
         Write-Warning 'Zmiany nie nakladaja sie czysto - probuje git apply --3way.'
@@ -168,6 +180,7 @@ try {
             Write-Warning 'Wystapily konflikty - rozwiaz je recznie (git status). Uwaga: --3way dodaje zmiany do indeksu.'
             exit 1
         }
+        Remove-SandboxRefs
         Write-Host "`nZmiany nalozone (3-way). Uwaga: --3way dodaje zmiany do indeksu (git restore --staged .)." -ForegroundColor Green
     } else {
         Write-Warning "Zmiany nie nakladaja sie czysto. Uruchom ponownie z -ThreeWay albo pobierz pliki recznie z refs/sandbox/wip (git checkout refs/sandbox/wip -- <plik>)."

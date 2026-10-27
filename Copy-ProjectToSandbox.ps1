@@ -26,6 +26,12 @@
 .PARAMETER Branch
     Galaz do pobrania (domyslnie biezaca galaz zrodla / domyslna galaz zdalnego repo).
 
+.PARAMETER Force
+    Jesli projekt juz jest w Projects - nadpisz go bez pytania (z kopia zapasowa, chyba ze -NoBackup).
+
+.PARAMETER NoBackup
+    Przy nadpisywaniu usun poprzednia kopie zamiast przenosic ja do Projects\.backup (bez pytania o kopie).
+
 .EXAMPLE
     E:\SandBox\Copy-ProjectToSandbox.ps1 D:\Repos\MojProjekt
 .EXAMPLE
@@ -38,6 +44,8 @@ param(
     [string]$Target,
     [string]$Branch,
     [switch]$RecurseSubmodules,
+    [switch]$Force,
+    [switch]$NoBackup,
     [string]$Root      # folder srodowiska - domyslnie tam, gdzie lezy ten skrypt
 )
 
@@ -61,7 +69,7 @@ $isLocal = Test-Path -LiteralPath $Source -PathType Container
 if ($isLocal) {
     $Source = (Invoke-Git -C $Source rev-parse --show-toplevel) -replace '/', '\'
     if (-not $Target) { $Target = $Source }
-    $originUrl = & $Git -C $Source remote get-url origin
+    $originUrl = & $Git -C $Source config --get remote.origin.url   # bez komunikatu, gdy origin nie istnieje
     if ($LASTEXITCODE -ne 0) { $originUrl = $null }
 }
 if (-not $Name) { $Name = (Split-Path ($Source.TrimEnd('\', '/')) -Leaf) -replace '\.git$', '' }
@@ -69,7 +77,42 @@ if ($Name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw "Niepoprawna nazwa p
 
 $dest = Join-Path $Projects $Name
 if (Test-Path -LiteralPath $dest) {
-    throw "Folder $dest juz istnieje. Jesli ma niewyeksportowana prace - najpierw ja zaimportuj, potem usun folder recznie."
+    # Celowo bez "git status": host nie uruchamia gita w repozytorium zmienionym w Sandboxie.
+    Write-Warning "Projekt $Name jest juz w $dest."
+    Write-Host '  Zmiany wprowadzone w Sandboxie, ktore nie zostaly wyeksportowane i zaimportowane, nie trafia do nowej kopii.' -ForegroundColor Yellow
+    $infoFile = Join-Path $Projects ".sandbox-export\$Name.json"
+    $lastExport = 'nigdy'
+    if (Test-Path -LiteralPath $infoFile) {
+        try { $lastExport = [string](Get-Content -LiteralPath $infoFile -Raw | ConvertFrom-Json).exportedAt } catch { }
+    }
+    Write-Host "  Ostatni eksport z Sandboxa: $($lastExport.Substring(0, [Math]::Min(40, $lastExport.Length)))"
+
+    if (-not $Force) {
+        $answer = Read-Host "Nadpisac $dest nowym klonem z $Source ? [t/N]"
+        if ($answer -notmatch '^(t|tak|y|yes)$') { Write-Host 'Przerwano - nic nie zostalo zmienione.'; return }
+        if (-not $NoBackup) {
+            # Domyslnie TAK (Enter) - kopia jest natychmiastowa i pozwala odzyskac zmiany.
+            $answer = Read-Host "Zachowac poprzednia kopie w $Projects\.backup ? [T/n]"
+            if ($answer -match '^(n|nie|no)$') { $NoBackup = $true }
+        }
+    }
+
+    try {
+        if ($NoBackup) {
+            # rd /s /q nie wchodzi w dowiazania (junction/symlink) - usuwa tylko je same, nie ich cel.
+            & cmd.exe /c rd /s /q $dest
+            if (Test-Path -LiteralPath $dest) { throw 'nie udalo sie usunac wszystkich plikow' }
+            Write-Host '  Poprzednia kopia usunieta.'
+        } else {
+            $backupDir = Join-Path $Projects '.backup'
+            New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+            $backup = Join-Path $backupDir ('{0}-{1}' -f $Name, (Get-Date -Format 'yyyyMMdd-HHmmss'))
+            Move-Item -LiteralPath $dest -Destination $backup   # zmiana nazwy - natychmiastowa
+            Write-Host "  Poprzednia kopia przeniesiona do: $backup" -ForegroundColor DarkGray
+        }
+    } catch {
+        throw "Nie udalo sie zwolnic folderu $dest ($($_.Exception.Message)). Zamknij w Sandboxie programy korzystajace z projektu (VS Code, terminal, Claude) albo zamknij Sandbox i sprobuj ponownie."
+    }
 }
 
 # --- Klonowanie ------------------------------------------------------------------

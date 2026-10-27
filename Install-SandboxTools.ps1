@@ -11,6 +11,7 @@
       - Angular CLI (pakiet npm @angular/cli, instalowany do osobnego prefiksu - polecenie ng)
       - Python (pakiet NuGet "python" - pelny, przenosny Python z pip i venv)
       - .NET SDK 8 i 10 (zip; kompilator C#, runtime .NET, ASP.NET Core i Windows Desktop)
+      - Git Extensions (portable zip; graficzny klient Git)
     i tworzy strukture folderow mapowana przez DevSandbox.wsb (folder srodowiska moze lezec w dowolnym
     miejscu - w przykladach E:\SandBox; sciezki w DevSandbox.wsb sa dopasowywane automatycznie):
 
@@ -79,6 +80,7 @@ $ClaudeDir = Join-Path $Tools 'claude-code'
 $PythonDir = Join-Path $Tools 'Python'
 $NgDir     = Join-Path $Tools 'angular-cli'
 $DotnetDir = Join-Path $Tools 'dotnet'
+$GitExtDir = Join-Path $Tools 'GitExtensions'
 
 function Write-Step([string]$Text) { Write-Host "`n=== $Text ===" -ForegroundColor Cyan }
 
@@ -174,6 +176,69 @@ function Get-PortableGitRelease {
     }
 }
 
+# Zasob najnowszego wydania GitHub pasujacy do wzorca: { Name, Url, Sha256 }.
+# 1) API GitHub (SHA-256 z pola "digest"; opcjonalny token w GITHUB_TOKEN).
+# 2) Przy odmowie API: tag z przekierowania /releases/latest, lista plikow z /releases/expanded_assets/<tag>.
+# Gdy brak "digest", SHA-256 z pliku sum wydania (np. checksums.txt), jesli podano -ChecksumAsset.
+function Get-GitHubReleaseAsset([string]$Repo, [string]$AssetPattern, [string]$ChecksumAsset) {
+    $headers = @{ 'User-Agent' = 'SandboxToolsInstaller' }
+    if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:GITHUB_TOKEN" }
+    $assets = $null; $tag = $null
+    try {
+        $release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers
+        $tag = $release.tag_name
+        $assets = @($release.assets | ForEach-Object {
+            [pscustomobject]@{ Name = $_.name; Url = $_.browser_download_url
+                               Sha256 = if ($_.digest -match '^sha256:([0-9a-fA-F]{64})$') { $Matches[1] } else { $null } } })
+    } catch {
+        Write-Warning "  API GitHub niedostepne dla $Repo ($($_.Exception.Message.Split([Environment]::NewLine)[0])) - uzywam strony wydania."
+        $req = [System.Net.HttpWebRequest]::Create("https://github.com/$Repo/releases/latest")
+        $req.AllowAutoRedirect = $false
+        $req.UserAgent = 'SandboxToolsInstaller'
+        $resp = $req.GetResponse()
+        try { $location = $resp.Headers['Location'] } finally { $resp.Close() }
+        if ($location -notmatch '/releases/tag/([^/?#]+)$') { throw "Nie udalo sie ustalic najnowszego wydania $Repo." }
+        $tag = $Matches[1]
+        $html = Get-Text "https://github.com/$Repo/releases/expanded_assets/$tag"
+        $assets = @([regex]::Matches($html, "href=""(/$([regex]::Escape($Repo))/releases/download/[^""]+)""") |
+            ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique | ForEach-Object {
+                [pscustomobject]@{ Name = [Uri]::UnescapeDataString(($_ -split '/')[-1]); Url = "https://github.com$_"; Sha256 = $null } })
+    }
+    $asset = $assets | Where-Object { $_.Name -match $AssetPattern } | Select-Object -First 1
+    if (-not $asset) { throw "Nie znaleziono pliku pasujacego do '$AssetPattern' w wydaniu $tag ($Repo). Dostepne: $(($assets.Name) -join ', ')" }
+    if (-not $asset.Sha256 -and $ChecksumAsset) {
+        $sumAsset = $assets | Where-Object { $_.Name -eq $ChecksumAsset } | Select-Object -First 1
+        if ($sumAsset) {
+            $sums = Get-Text $sumAsset.Url
+            if ($sums -match "(?m)^([0-9a-fA-F]{64})\s+\*?$([regex]::Escape($asset.Name))\s*$") { $asset.Sha256 = $Matches[1] }
+        }
+    }
+    Write-Host "  Wydanie: $tag, plik: $($asset.Name)"
+    $asset
+}
+
+# Architektura pliku wykonywalnego (naglowek PE): x64, ARM64, x86.
+function Get-PeMachine([string]$Path) {
+    $fs = [IO.File]::OpenRead($Path)
+    try {
+        $br = New-Object IO.BinaryReader($fs)
+        $fs.Position = 0x3C; $fs.Position = $br.ReadInt32() + 4
+        switch ($br.ReadUInt16()) { 0x8664 { 'x64' } 0xAA64 { 'ARM64' } 0x14C { 'x86' } default { 'nieznana' } }
+    } finally { $fs.Dispose() }
+}
+
+# Rozpakowuje zip do folderu docelowego; jesli zip ma jeden folder glowny - jego zawartosc.
+function Expand-ToolZip([string]$Zip, [string]$Destination) {
+    $extract = Join-Path $Temp ([IO.Path]::GetFileNameWithoutExtension($Zip))
+    New-Item -ItemType Directory -Force -Path $extract | Out-Null
+    & $Tar -xf $Zip -C $extract
+    if ($LASTEXITCODE -ne 0) { throw "Rozpakowanie $Zip nie powiodlo sie." }
+    $top = @(Get-ChildItem -LiteralPath $extract -Force)
+    $src = if ($top.Count -eq 1 -and $top[0].PSIsContainer) { $top[0].FullName } else { $extract }
+    New-Item -ItemType Directory -Force -Path (Split-Path $Destination) | Out-Null
+    Move-Item -LiteralPath $src -Destination $Destination
+}
+
 function Test-NeedsInstall([string]$Path, [string]$Name) {
     if (Test-Path $Path) {
         if (-not $Force) {
@@ -219,8 +284,10 @@ if (Test-Path $wsbFile) {
     foreach ($mf in $wsb.SelectNodes('/Configuration/MappedFolders/MappedFolder')) {
         $rel = $hostFolders[$mf.SandboxFolder]
         if ($rel) {
-            $expected = Join-Path $Root $rel
-            if ($mf.HostFolder -ne $expected) { $mf.HostFolder = $expected; $changed = $true }
+            # [string]: Join-Path zwraca string opakowany w PSObject, a wezly XML przyjmuja tylko czysty string.
+            $expected = [string](Join-Path $Root $rel)
+            $node = $mf.SelectSingleNode('HostFolder')
+            if ($node -and $node.InnerText -ne $expected) { $node.InnerText = $expected; $changed = $true }
         }
     }
     if ($changed) {
@@ -410,6 +477,41 @@ if (Test-NeedsInstall $DotnetDir '.NET SDK') {
     $env:DOTNET_NOLOGO = '1'
     Write-Host '  Zainstalowane SDK:' -ForegroundColor Green
     & (Join-Path $DotnetDir 'dotnet.exe') --list-sdks | ForEach-Object { Write-Host "    $_" -ForegroundColor Green }
+}
+
+# --- Git Extensions (portable zip) ------------------------------------------------
+# Graficzny klient Git. Wymaga .NET Desktop Runtime 10 - jest w Tools\dotnet (SDK 10).
+Write-Step 'Git Extensions'
+if (Test-NeedsInstall $GitExtDir 'Git Extensions') {
+    # Wersja portable dla x64 (wydanie zawiera tez wersje ARM64).
+    $a = Get-GitHubReleaseAsset 'gitextensions/gitextensions' '(?i)^(?!.*arm).*portable.*\.zip$'
+    if (-not $a.Sha256) { throw "Brak sumy SHA-256 dla $($a.Name) - przerywam (ustaw GITHUB_TOKEN, aby korzystac z API GitHub)." }
+    $zip = Join-Path $Temp $a.Name
+    Get-File $a.Url $zip
+    Assert-FileHash $zip $a.Sha256 'SHA256' $a.Name
+    Expand-ToolZip $zip $GitExtDir
+    $exe = Get-ChildItem $GitExtDir -Filter 'GitExtensions.exe' -File -Recurse | Select-Object -First 1
+    if (-not $exe) { throw "W paczce $($a.Name) nie ma GitExtensions.exe." }
+    $arch = Get-PeMachine $exe.FullName
+    if ($arch -ne 'x64') {
+        Remove-Item -LiteralPath $GitExtDir -Recurse -Force
+        throw "Pobrany Git Extensions jest dla architektury $arch, a nie x64 ($($a.Name)) - usuniety."
+    }
+
+    # IsPortable=False: ustawienia w %APPDATA%\GitExtensions (w Sandboxie przekierowane do Home),
+    # bo folder programu w Tools jest w Sandboxie tylko do odczytu.
+    $cfgFile = Join-Path $exe.DirectoryName 'GitExtensions.dll.config'
+    if (Test-Path -LiteralPath $cfgFile) {
+        $cfg = New-Object System.Xml.XmlDocument
+        $cfg.PreserveWhitespace = $true
+        $cfg.Load($cfgFile)
+        $node = $cfg.SelectSingleNode("//setting[@name='IsPortable']/value")
+        if ($node) { $node.InnerText = 'False'; $cfg.Save($cfgFile); Write-Host '  Ustawiono IsPortable=False (ustawienia w profilu uzytkownika).' }
+        else { Write-Warning '  Brak ustawienia IsPortable w GitExtensions.dll.config - ustawienia moga nie byc zapisywane.' }
+    }
+    $sig = Get-AuthenticodeSignature -LiteralPath $exe.FullName
+    Write-Host "  GitExtensions.exe: podpis $($sig.Status) $($sig.SignerCertificate.Subject)" -ForegroundColor DarkGray
+    Write-Host "  Zainstalowano: Git Extensions $($exe.VersionInfo.ProductVersion)" -ForegroundColor Green
 }
 
 # --- Ustawienia domyslne w Home (tylko jesli jeszcze nie istnieja) -------------

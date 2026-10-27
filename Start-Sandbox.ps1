@@ -84,6 +84,13 @@ foreach ($dir in "$documents\WindowsPowerShell", "$documents\PowerShell") {
     Set-Content -Path "$dir\profile.ps1" -Value $profileText -Encoding UTF8
 }
 
+# --- Ustawienia Git Extensions (trwale) ----------------------------------------------------
+# Git Extensions (IsPortable=False) zapisuje ustawienia w %APPDATA%\GitExtensions - kierujemy go do Home.
+$gitExtHome  = "$HomeDir\GitExtensions"
+$gitExtLocal = "$env:APPDATA\GitExtensions"
+New-Item -ItemType Directory -Force -Path $gitExtHome | Out-Null
+if (-not (Test-Path -LiteralPath $gitExtLocal)) { New-Item -ItemType Junction -Path $gitExtLocal -Value $gitExtHome | Out-Null }
+
 # --- Zmienne dla programow uruchamianych ze skrotow ---------------------------------------
 # Eksplorator (a wiec i programy uruchamiane ze skrotow) moze nie widziec zmiennych ustawionych
 # w trakcie logowania. Bez CLAUDE_CONFIG_DIR rozszerzenie Claude w VS Code szukaloby historii rozmow
@@ -124,6 +131,13 @@ $claudeLauncher = New-Launcher 'Start-Claude' (@'
 Set-Location -LiteralPath $SandboxProject
 claude
 '@)
+$gitExtExe = Get-ChildItem "$Tools\GitExtensions" -Filter 'GitExtensions.exe' -File -Recurse -ErrorAction SilentlyContinue |
+             Select-Object -First 1 -ExpandProperty FullName
+if ($gitExtExe) {
+    $gitExtLauncher = New-Launcher 'Start-GitExtensions' (@'
+Start-Process -FilePath '__GITEXT__' -ArgumentList 'browse', ('"' + $SandboxProject + '"') -WorkingDirectory $SandboxProject
+'@ -replace '__GITEXT__', $gitExtExe)
+}
 $hidden = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File'
 
 # --- Skroty na pulpicie -----------------------------------------------------------
@@ -144,6 +158,10 @@ New-Shortcut -Name 'Visual Studio Code' -Target 'powershell.exe' -Arguments "$hi
              -Icon "$Tools\VSCode\Code.exe,0"
 New-Shortcut -Name 'Git Bash'           -Target 'powershell.exe' -Arguments "$hidden `"$bashLauncher`"" `
              -Icon "$Tools\Git\git-bash.exe,0"
+if ($gitExtExe) {
+    New-Shortcut -Name 'Git Extensions' -Target 'powershell.exe' -Arguments "$hidden `"$gitExtLauncher`"" `
+                 -Icon "$gitExtExe,0"
+}
 New-Shortcut -Name 'Claude Code'        -Target 'powershell.exe' `
              -Arguments "-NoExit -ExecutionPolicy Bypass -File `"$claudeLauncher`"" `
              -Icon "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
@@ -164,7 +182,7 @@ Write-Host ('  claude : ' + (claude --version))
 Write-Host ('  python : ' + (python --version))
 Write-Host ('  dotnet : SDK ' + ((dotnet --list-sdks | ForEach-Object { ($_ -split ' ')[0] }) -join ', '))
 Write-Host ''
-Write-Host 'Polecenia: claude (Claude Code), code . (VS Code), git, python, dotnet' -ForegroundColor DarkGray
+Write-Host 'Polecenia: claude (Claude Code), code . (VS Code), git, python, dotnet, ng' -ForegroundColor DarkGray
 Write-Host 'Projekty zapisuj w C:\SandBox\Projects - pozostale pliki znikna po zamknieciu Sandboxa.' -ForegroundColor Yellow
 Write-Host 'Aby przeniesc prace na hosta: skrot "Eksportuj zmiany", potem na hoscie Import-SandboxWork.ps1.' -ForegroundColor Yellow
 '@

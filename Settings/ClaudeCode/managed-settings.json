@@ -16,11 +16,21 @@
       "Edit(//c/Program Files/**)",
       "Edit(//c/Program Files (x86)/**)",
       "Edit(//c/ProgramData/**)",
+      "Edit(//c/SandBox/Tools/**)",
       "Edit(~/.claude/settings.json)",
       "Edit(~/.claude/settings.local.json)",
       "Edit(~/.claude/CLAUDE.md)",
       "Edit(~/.claude/hooks/**)",
-      "Edit(~/.claude.json)"
+      "Edit(~/.claude.json)",
+      "Edit(//c/SandBox/Home/.claude/settings.json)",
+      "Edit(//c/SandBox/Home/.claude/settings.local.json)",
+      "Edit(//c/SandBox/Home/.claude/CLAUDE.md)",
+      "Edit(//c/SandBox/Home/.claude/hooks/**)",
+      "Edit(//c/SandBox/Home/.claude/plugins/**)",
+      "Edit(//c/SandBox/Home/.claude/.claude.json)",
+      "Edit(//c/SandBox/Home/.claude/.credentials.json)",
+      "Edit(//c/SandBox/Home/.claude/policy-limits.json)",
+      "Edit(//c/SandBox/Home/.claude/remote-settings.json)"
     ],
     "ask": [
       "Bash(git push:*)",
@@ -31,16 +41,42 @@
       "Bash(winget:*)",
       "Bash(choco:*)",
       "Bash(curl:*)",
+      "Bash(curl.exe:*)",
+      "Bash(/usr/bin/curl:*)",
       "Bash(wget:*)",
+      "Bash(/usr/bin/wget:*)",
+      "Bash(nslookup:*)",
+      "Bash(helm repo:*)",
+      "Bash(helm pull:*)",
+      "PowerShell(curl:*)",
+      "PowerShell(curl.exe:*)",
+      "PowerShell(wget:*)",
       "PowerShell(Invoke-WebRequest:*)",
+      "PowerShell(iwr:*)",
       "PowerShell(Invoke-RestMethod:*)",
+      "PowerShell(irm:*)",
+      "PowerShell(Start-BitsTransfer:*)",
+      "PowerShell(Resolve-DnsName:*)",
+      "PowerShell(nslookup:*)",
+      "PowerShell(helm repo:*)",
+      "PowerShell(helm pull:*)",
       "WebFetch",
       "WebSearch",
+      "ShareOnboardingGuide",
+      "PublishPlugin",
+      "ArtifactData",
+      "ArtifactComments",
+      "SendMessage",
+      "RemoteTrigger",
       "Read(**/.env*)",
+      "Read(**/*.env)",
       "Read(**/.ssh/**)",
       "Read(**/*.pem)",
       "Read(**/*.key)",
+      "Read(**/*.crt)",
       "Read(**/*.pfx)",
+      "Read(**/*.p12)",
+      "Read(**/*.jks)",
       "Read(**/.credentials.json)",
       "Read(**/.git-credentials)"
     ]
@@ -52,14 +88,16 @@
       "Pushing or merging anything into a branch whose name contains 'release'.",
       "Creating merge requests or pull requests (gh pr create, glab mr create, API calls, push options).",
       "Editing operating-system functions or settings: registry, services, scheduled tasks, firewall, users, execution policy, system directories.",
-      "Deleting or modifying any data on remote resources or network drives (UNC paths, mapped network drives, SSH/SFTP/SCP targets, cloud storage, remote repositories)."
+      "Deleting or modifying any data on remote resources or network drives (UNC paths, mapped network drives, SSH/SFTP/SCP targets, cloud storage, remote repositories).",
+      "Modifying Claude Code security controls: managed settings, hooks, guard.py, the Python interpreter that runs the hook (C:\\SandBox\\Tools), user settings in C:\\SandBox\\Home\\.claude, or any attempt to disable or bypass hooks or permission checks."
     ],
     "soft_deny": [
       "$defaults",
       "Any git push, even to non-release branches, without the user's explicit confirmation in this conversation.",
       "Installing applications or packages, or downloading and running scripts from the internet, without explicit user confirmation.",
       "Reading or printing passwords, keys, tokens, credentials or other security secrets without explicit user confirmation.",
-      "Sending any data to the internet (HTTP requests, uploads, web searches, publishing, external MCP services) without explicit user confirmation."
+      "Sending any data to the internet (HTTP requests, uploads, web searches, publishing, external MCP services) without explicit user confirmation.",
+      "Writing a script file and then executing it when the script makes network connections, reads secrets or touches paths outside the project, without explicit user confirmation."
     ]
   },
   "hooks": {
@@ -72,7 +110,7 @@
             "command": "C:/SandBox/Tools/Python/python.exe",
             "args": ["C:/Program Files/ClaudeCode/hooks/guard.py"],
             "timeout": 15,
-            "statusMessage": "Sprawdzanie reguł bezpieczeństwa..."
+            "statusMessage": "Sprawdzanie reguł‚ bezpieczeństwa..."
           }
         ]
       }
