@@ -2,7 +2,7 @@
 
 This package contains powershell scripts that download and configure environment for C# and Angular programming tools 
 with Claude Code in an isolated Windows Sandbox.
-Portable tools (Git, Node.js, Angular CLI, VS Code, Claude Code, Python, .NET SDK 8 and 10) are installed as portable on your host and are running
+Portable tools (Git, Node.js, Angular CLI, VS Code, Claude Code, Python, .NET SDK 8 and 10) are installed on your host and are running
 in an isolated Windows Sandbox (Sandbox loses all data after closing, so we keep them on your host).
 Projects from the host (e.g., `C:\_Projects`) are cloned into the Sandbox, and after work is done,
 commits and uncommitted changes return to the original repository via `git fetch` from a bundle file.
@@ -10,7 +10,10 @@ commits and uncommitted changes return to the original repository via `git fetch
 > In the examples, the environment folder is `E:\SandBox`. It can be located anywhere – the scripts automatically determine
 > their location, and `Install-SandboxTools.ps1` adjusts the paths in `DevSandbox.wsb`.
 
+
 ---
+All code is offered as-is with no guarantees. Nothing in this project should be considered production-ready or used in production/critical environments without your extensive testing and validation.
+
 
 ## Quick start
 
