@@ -55,7 +55,7 @@ in `C:\SandBox\Projects\SampleMicroService` along with desktop shortcuts. On the
 
 **7. Work** – the **Claude Code**, **Visual Studio Code**, and **Git Bash** shortcuts open the cloned project.
 
-**8. Transfer work to the host** – in the Sandbox, click the **Eksportuj zmiany** (Export changes) shortcut, and on the host run:
+**8. Transfer work to the host** – in the Sandbox, click the **Export changes** shortcut, and on the host run:
 
 ```powershell
 E:\SandBox\Import-SandboxWork.ps1 SampleMicroService
@@ -70,7 +70,7 @@ Changes (commits from the Sandbox as `sandbox/*` branches and uncommitted files)
 |---------|-----------|-------|
 | host    | `E:\SandBox\Copy-ProjectToSandbox.ps1 C:\_Projects\<Project>` | copy project to Sandbox (becomes the current one) |
 | host    | `E:\SandBox\DevSandbox.wsb` (double-click) | start Sandbox |
-| Sandbox | shortcut **Eksportuj zmiany** | save work for transfer |
+| Sandbox | shortcut **Export changes** | save work for transfer |
 | host    | `E:\SandBox\Import-SandboxWork.ps1 <Project>` | transfer work to the project on the host |
 | host    | `Set-Content E:\SandBox\Scripts\last-project.txt <Project>` | switch the current project |
 | host    | `powershell -ExecutionPolicy Bypass -File E:\SandBox\Install-SandboxTools.ps1 -Force` | update all tools |
@@ -245,8 +245,8 @@ The startup script (`C:\SandBox\Scripts\Start-Sandbox.ps1`) automatically:
   | **Claude Code** | PowerShell console with Claude Code in the current project |
   | **Visual Studio Code** | VS Code with the current project open |
   | **Git Bash** | Git Bash in the current project |
-  | **Projekty** | opens the `C:\SandBox\Projects` folder in Explorer |
-  | **Eksportuj zmiany** | runs `Export-SandboxWork.ps1` for all projects |
+  | **Projects** | opens the `C:\SandBox\Projects` folder in Explorer |
+  | **Export changes** | runs `Export-SandboxWork.ps1` for all projects |
 
 - opens a PowerShell terminal in the current project, showing tool versions.
 
@@ -306,7 +306,7 @@ Workflow cycle:
         ▼
  E:\SandBox\Projects\SampleMicroService  ═══  C:\SandBox\Projects\SampleMicroService
                                                       │  2. work: claude, code, git commit
-                                                      │  3. Eksportuj zmiany (Export changes)
+                                                      │  3. Export changes
                                                       ▼
  E:\SandBox\Projects\.sandbox-export\     ═══  SampleMicroService.bundle + .json
         │  4. Import-SandboxWork.ps1
@@ -423,7 +423,7 @@ npm start                          # ng serve -> http://localhost:4200
 
 ### 4.3. Exporting work (Sandbox)
 
-Click the **Eksportuj zmiany** (Export changes) shortcut on the desktop (exports all projects from `C:\SandBox\Projects`)
+Click the **Export changes** shortcut on the desktop (exports all projects from `C:\SandBox\Projects`)
 or run manually:
 
 ```powershell

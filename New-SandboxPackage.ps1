@@ -1,29 +1,29 @@
 <#
 .SYNOPSIS
-    Tworzy paczke zip z plikami potrzebnymi do zbudowania srodowiska Windows Sandbox na innym komputerze.
+    Creates a zip package with the files needed to build the Windows Sandbox environment on another computer.
 
 .DESCRIPTION
-    Uruchamiany NA HOSCIE. Pakuje WYLACZNIE pliki z listy ponizej (skrypty, konfiguracje Sandboxa
-    i Claude Code, dokumentacje). Celowo NIE pakuje: Tools\ (pobiera je Install-SandboxTools.ps1),
-    Home\ (logowanie Claude, historia, ustawienia), Projects\, ProjectMap.json, Scripts\ (kopie skryptow)
-    ani logow.
+    Run ON THE HOST. Packs ONLY the files listed below (scripts, Sandbox and Claude Code
+    configuration, documentation). Deliberately does NOT pack: Tools\ (downloaded by Install-SandboxTools.ps1),
+    Home\ (Claude login, history, settings), Projects\, ProjectMap.json, Scripts\ (script copies)
+    or logs.
 
-    Paczka zawiera folder SandBox\ - po rozpakowaniu np. na dysk E: powstaje E:\SandBox.
+    The package contains a SandBox\ folder - extracting it e.g. to drive E: creates E:\SandBox.
 
 .PARAMETER OutDir
-    Folder, w ktorym powstanie paczka (domyslnie <folder srodowiska>\dist).
+    Folder where the package is created (default <environment folder>\dist).
 
 .EXAMPLE
     E:\SandBox\New-SandboxPackage.ps1
 #>
 [CmdletBinding()]
 param(
-    [string]$Root,     # domyslnie folder, w ktorym lezy ten skrypt
+    [string]$Root,     # defaults to the folder containing this script
     [string]$OutDir
 )
 
 $ErrorActionPreference = 'Stop'
-# $PSScriptRoot jako wartosc domyslna w param() jest pusty w Windows PowerShell 5.1 - ustalamy tutaj.
+# $PSScriptRoot as a default value in param() is empty in Windows PowerShell 5.1 - resolve it here.
 if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 $Files = @(
@@ -49,13 +49,13 @@ New-Item -ItemType Directory -Force -Path $OutDir, $pkgRoot | Out-Null
 try {
     foreach ($f in $Files) {
         $src = Join-Path $Root $f
-        if (-not (Test-Path -LiteralPath $src)) { throw "Brak pliku: $src" }
+        if (-not (Test-Path -LiteralPath $src)) { throw "Missing file: $src" }
         $dst = Join-Path $pkgRoot $f
         New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
         Copy-Item -LiteralPath $src -Destination $dst
         Write-Host "  + $f"
     }
-    # puste foldery tworzone i tak przez Install-SandboxTools.ps1 - dla czytelnosci struktury
+    # empty folders (created anyway by Install-SandboxTools.ps1) - for a clearer structure
     foreach ($d in 'Projects', 'Scripts') { New-Item -ItemType Directory -Force -Path (Join-Path $pkgRoot $d) | Out-Null }
 
     Compress-Archive -Path $pkgRoot -DestinationPath $zip -Force
@@ -63,4 +63,4 @@ try {
     Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host "`nUtworzono: $zip ($([Math]::Round((Get-Item $zip).Length / 1KB)) KB)" -ForegroundColor Green
+Write-Host "`nCreated: $zip ($([Math]::Round((Get-Item $zip).Length / 1KB)) KB)" -ForegroundColor Green

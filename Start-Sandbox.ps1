@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-    Skrypt startowy uruchamiany automatycznie WEWNATRZ Windows Sandbox (LogonCommand w DevSandbox.wsb).
+    Startup script run automatically INSIDE Windows Sandbox (LogonCommand in DevSandbox.wsb).
 
 .DESCRIPTION
-    - ustawia PATH i zmienne srodowiskowe dla Git, Node.js, VS Code i Claude Code,
-    - kieruje ustawienia (logowanie Claude, .gitconfig, rozszerzenia VS Code) do C:\SandBox\Home,
-      dzieki czemu przetrwaja zamkniecie Sandboxa,
-    - tworzy skroty na pulpicie i otwiera terminal w folderze projektow.
+    - sets PATH and environment variables for Git, Node.js, VS Code and Claude Code,
+    - redirects settings (Claude login, .gitconfig, VS Code extensions) to C:\SandBox\Home,
+      so they survive closing the Sandbox,
+    - creates desktop shortcuts and opens a terminal in the projects folder.
 #>
 
 $ErrorActionPreference = 'Continue'
@@ -16,33 +16,33 @@ $Tools    = "$Root\Tools"
 $HomeDir  = "$Root\Home"
 $Projects = "$Root\Projects"
 
-# --- Zasady wykonywania skryptow ---------------------------------------------------
-# npm tworzy nakladke claude.ps1, a domyslna polityka w Sandboxie (Restricted) blokuje skrypty .ps1.
-# RemoteSigned pozwala uruchamiac lokalne skrypty, ale blokuje niepodpisane pobrane z internetu.
-# Ostrzezenie "overridden by a policy defined at a more specific scope" jest oczekiwane
-# (ten proces dziala z -ExecutionPolicy Bypass) - ustawienie i tak zostaje zapisane.
+# --- Script execution policy -------------------------------------------------------
+# npm creates a claude.ps1 wrapper, and the default policy in the Sandbox (Restricted) blocks .ps1 scripts.
+# RemoteSigned allows running local scripts but blocks unsigned ones downloaded from the internet.
+# The warning "overridden by a policy defined at a more specific scope" is expected
+# (this process runs with -ExecutionPolicy Bypass) - the setting is saved anyway.
 try {
     Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop
 } catch { }
 
-# --- Zmienne srodowiskowe --------------------------------------------------------
+# --- Environment variables -------------------------------------------------------
 $vars = [ordered]@{
-    CLAUDE_CONFIG_DIR         = "$HomeDir\.claude"          # logowanie i ustawienia Claude Code (trwale)
-    CLAUDE_CODE_GIT_BASH_PATH = "$Tools\Git\bin\bash.exe"   # Git Bash dla narzedzia Bash w Claude Code
-    DISABLE_AUTOUPDATER       = '1'                          # Tools jest tylko do odczytu; aktualizuj skryptem na hoscie
-    GIT_CONFIG_GLOBAL         = "$HomeDir\.gitconfig"        # globalna konfiguracja Git (trwala)
-    VSCODE_PORTABLE           = "$HomeDir\vscode-data"       # dane i rozszerzenia VS Code (trwale)
-    PYTHONPYCACHEPREFIX       = "$env:LOCALAPPDATA\pycache"  # Tools\Python jest tylko do odczytu
-    DOTNET_ROOT               = "$Tools\dotnet"              # .NET SDK 8 i 10 (tylko do odczytu)
+    CLAUDE_CONFIG_DIR         = "$HomeDir\.claude"          # Claude Code login and settings (persistent)
+    CLAUDE_CODE_GIT_BASH_PATH = "$Tools\Git\bin\bash.exe"   # Git Bash for the Bash tool in Claude Code
+    DISABLE_AUTOUPDATER       = '1'                          # Tools is read-only; update with the script on the host
+    GIT_CONFIG_GLOBAL         = "$HomeDir\.gitconfig"        # global Git configuration (persistent)
+    VSCODE_PORTABLE           = "$HomeDir\vscode-data"       # VS Code data and extensions (persistent)
+    PYTHONPYCACHEPREFIX       = "$env:LOCALAPPDATA\pycache"  # Tools\Python is read-only
+    DOTNET_ROOT               = "$Tools\dotnet"              # .NET SDK 8 and 10 (read-only)
     DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     DOTNET_NOLOGO             = '1'
-    NUGET_PACKAGES            = "$HomeDir\.nuget\packages"   # cache pakietow NuGet (trwaly - szybszy restore)
-    npm_config_cache          = "$HomeDir\.npm-cache"        # cache npm (trwaly - szybsze npm ci)
-    npm_config_prefix         = "$HomeDir\npm-global"        # npm install -g (Tools\node jest tylko do odczytu)
-    NG_CLI_ANALYTICS          = 'false'                      # ng nie pyta o telemetrie w kazdej sesji
-    HISTFILE                  = 'C:/SandBox/Home/.bash_history' # historia polecen Git Bash (trwala)
+    NUGET_PACKAGES            = "$HomeDir\.nuget\packages"   # NuGet package cache (persistent - faster restore)
+    npm_config_cache          = "$HomeDir\.npm-cache"        # npm cache (persistent - faster npm ci)
+    npm_config_prefix         = "$HomeDir\npm-global"        # npm install -g (Tools\node is read-only)
+    NG_CLI_ANALYTICS          = 'false'                      # ng does not ask about telemetry in every session
+    HISTFILE                  = 'C:/SandBox/Home/.bash_history' # Git Bash command history (persistent)
 }
-# Testy Karma (karma-chrome-launcher) - Edge z Sandboxa zamiast Chrome
+# Karma tests (karma-chrome-launcher) - Edge from the Sandbox instead of Chrome
 $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" |
         Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($edge) { $vars['CHROME_BIN'] = $edge }
@@ -68,9 +68,9 @@ $newPath  = (($addToPath + ($userPath -split ';')) | Where-Object { $_ } | Selec
 [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
 $env:Path = ($addToPath -join ';') + ';' + $env:Path
 
-# --- Historia polecen PowerShell (strzalka w gore / Ctrl+R) ------------------------------
-# Profil PowerShell (Dokumenty) jest tworzony przy kazdym starcie i kieruje historie PSReadLine do Home,
-# dzieki czemu przetrwa zamkniecie Sandboxa. Dziala w terminalu VS Code i w kazdej konsoli PowerShell.
+# --- PowerShell command history (Up arrow / Ctrl+R) --------------------------------------
+# The PowerShell profile (Documents) is created on every start and redirects the PSReadLine history to Home,
+# so it survives closing the Sandbox. Works in the VS Code terminal and in every PowerShell console.
 $psHistory = "$HomeDir\PowerShell\ConsoleHost_history.txt"
 New-Item -ItemType Directory -Force -Path (Split-Path $psHistory) | Out-Null
 $profileText = @'
@@ -84,25 +84,25 @@ foreach ($dir in "$documents\WindowsPowerShell", "$documents\PowerShell") {
     Set-Content -Path "$dir\profile.ps1" -Value $profileText -Encoding UTF8
 }
 
-# --- Ustawienia Git Extensions (trwale) ----------------------------------------------------
-# Git Extensions (IsPortable=False) zapisuje ustawienia w %APPDATA%\GitExtensions - kierujemy go do Home.
+# --- Git Extensions settings (persistent) --------------------------------------------------
+# Git Extensions (IsPortable=False) saves its settings in %APPDATA%\GitExtensions - we redirect it to Home.
 $gitExtHome  = "$HomeDir\GitExtensions"
 $gitExtLocal = "$env:APPDATA\GitExtensions"
 New-Item -ItemType Directory -Force -Path $gitExtHome | Out-Null
 if (-not (Test-Path -LiteralPath $gitExtLocal)) { New-Item -ItemType Junction -Path $gitExtLocal -Value $gitExtHome | Out-Null }
 
-# --- Zmienne dla programow uruchamianych ze skrotow ---------------------------------------
-# Eksplorator (a wiec i programy uruchamiane ze skrotow) moze nie widziec zmiennych ustawionych
-# w trakcie logowania. Bez CLAUDE_CONFIG_DIR rozszerzenie Claude w VS Code szukaloby historii rozmow
-# w profilu Sandboxa zamiast w C:\SandBox\Home\.claude. Skroty wczytuja wiec zmienne jawnie.
+# --- Variables for programs started from shortcuts -----------------------------------------
+# Explorer (and therefore programs started from shortcuts) may not see variables set
+# during logon. Without CLAUDE_CONFIG_DIR the Claude extension in VS Code would look for the conversation
+# history in the Sandbox profile instead of C:\SandBox\Home\.claude. So the shortcuts load the variables explicitly.
 $BinDir = "$env:LOCALAPPDATA\SandboxBin"
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 $EnvScript = "$BinDir\Sandbox-Env.ps1"
 
-# $SandboxProject: projekt ostatnio sklonowany przez Copy-ProjectToSandbox.ps1 (nazwa w Scripts\last-project.txt,
-# folder tylko do odczytu w Sandboxie). Odczytywany przy kazdym uruchomieniu skrotu; gdy projektu brak - Projects.
-# Uwaga: nie otwieraj w VS Code samego C:\SandBox\Projects - jako katalog glowny zmapowanego folderu ma on
-# realpath z ukosnikiem na koncu, przez co rozszerzenie Claude nie znajduje historii rozmow.
+# $SandboxProject: the project most recently cloned by Copy-ProjectToSandbox.ps1 (name in Scripts\last-project.txt,
+# a read-only folder in the Sandbox). Read on every shortcut launch; when the project is missing - Projects.
+# Note: do not open C:\SandBox\Projects itself in VS Code - as the root of a mapped folder it has
+# a realpath with a trailing backslash, which prevents the Claude extension from finding the conversation history.
 $projectBlock = @'
 $SandboxProject = '__PROJECTS__'
 try {
@@ -140,7 +140,7 @@ Start-Process -FilePath '__GITEXT__' -ArgumentList 'browse', ('"' + $SandboxProj
 }
 $hidden = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File'
 
-# --- Skroty na pulpicie -----------------------------------------------------------
+# --- Desktop shortcuts -------------------------------------------------------------
 $shell   = New-Object -ComObject WScript.Shell
 $desktop = [Environment]::GetFolderPath('Desktop')
 
@@ -165,14 +165,14 @@ if ($gitExtExe) {
 New-Shortcut -Name 'Claude Code'        -Target 'powershell.exe' `
              -Arguments "-NoExit -ExecutionPolicy Bypass -File `"$claudeLauncher`"" `
              -Icon "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
-New-Shortcut -Name 'Projekty'           -Target $Projects
-New-Shortcut -Name 'Eksportuj zmiany'   -Target 'powershell.exe' `
+New-Shortcut -Name 'Projects'           -Target $Projects
+New-Shortcut -Name 'Export changes'     -Target 'powershell.exe' `
              -Arguments "-NoExit -ExecutionPolicy Bypass -File `"$Root\Scripts\Export-SandboxWork.ps1`"" `
              -Icon "$env:SystemRoot\System32\shell32.dll,45"
 
-# --- Terminal powitalny -----------------------------------------------------------
+# --- Welcome terminal -------------------------------------------------------------
 $welcome = @'
-Write-Host 'Windows Sandbox - srodowisko programistyczne' -ForegroundColor Cyan
+Write-Host 'Windows Sandbox - development environment' -ForegroundColor Cyan
 Write-Host ('  git    : ' + (git --version))
 Write-Host ('  node   : ' + (node --version) + ', npm ' + (npm --version))
 if (Test-Path 'C:\SandBox\Tools\angular-cli\node_modules\@angular\cli\package.json') {
@@ -182,11 +182,11 @@ Write-Host ('  claude : ' + (claude --version))
 Write-Host ('  python : ' + (python --version))
 Write-Host ('  dotnet : SDK ' + ((dotnet --list-sdks | ForEach-Object { ($_ -split ' ')[0] }) -join ', '))
 Write-Host ''
-Write-Host 'Polecenia: claude (Claude Code), code . (VS Code), git, python, dotnet, ng' -ForegroundColor DarkGray
-Write-Host 'Projekty zapisuj w C:\SandBox\Projects - pozostale pliki znikna po zamknieciu Sandboxa.' -ForegroundColor Yellow
-Write-Host 'Aby przeniesc prace na hosta: skrot "Eksportuj zmiany", potem na hoscie Import-SandboxWork.ps1.' -ForegroundColor Yellow
+Write-Host 'Commands: claude (Claude Code), code . (VS Code), git, python, dotnet, ng' -ForegroundColor DarkGray
+Write-Host 'Save projects in C:\SandBox\Projects - all other files disappear when the Sandbox is closed.' -ForegroundColor Yellow
+Write-Host 'To move work to the host: the "Export changes" shortcut, then Import-SandboxWork.ps1 on the host.' -ForegroundColor Yellow
 '@
 $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($welcome))
-. $EnvScript   # ustawia $SandboxProject
+. $EnvScript   # sets $SandboxProject
 Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded `
               -WorkingDirectory $SandboxProject

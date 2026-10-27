@@ -1,45 +1,45 @@
 <#
 .SYNOPSIS
-    Przenosi prace z Sandboxa (commity + niezatwierdzone zmiany) do folderu docelowego na hoscie.
+    Brings work from the Sandbox (commits + uncommitted changes) into the target folder on the host.
 
 .DESCRIPTION
-    Uruchamiany NA HOSCIE, po wykonaniu w Sandboxie Export-SandboxWork.ps1.
-      1. git fetch z E:\SandBox\Projects\.sandbox-export\<nazwa>.bundle:
-           galezie z Sandboxa -> refs/remotes/sandbox/*   (np. sandbox/main)
-           HEAD z Sandboxa    -> refs/sandbox/head
-           migawka zmian      -> refs/sandbox/wip
-      2. (opcjonalnie, -FastForward) przesuwa biezaca galaz do commitow z Sandboxa,
-      3. naklada niezatwierdzone zmiany z Sandboxa (git apply) na katalog roboczy celu
-         - wczesniej pokazuje liste plikow i prosi o potwierdzenie,
-         - wlasne niezatwierdzone zmiany celu zapisuje jako kopie refs/sandbox/backup/<data>,
-      4. po udanym nalozeniu usuwa pomocnicze refs/sandbox/head i refs/sandbox/wip, zeby migawka
-         nie byla widoczna w historii (np. jako "galaz" sandbox/wip w Git Extensions / VS Code).
-         Zostaja, gdy zmiany nie zostaly nalozone (-NoApply, odmowa, konflikt) - mozna z nich pobrac pliki.
+    Run ON THE HOST, after running Export-SandboxWork.ps1 in the Sandbox.
+      1. git fetch from E:\SandBox\Projects\.sandbox-export\<name>.bundle:
+           branches from the Sandbox -> refs/remotes/sandbox/*   (e.g. sandbox/main)
+           HEAD from the Sandbox     -> refs/sandbox/head
+           changes snapshot          -> refs/sandbox/wip
+      2. (optionally, -FastForward) moves the current branch forward to the commits from the Sandbox,
+      3. applies the uncommitted changes from the Sandbox (git apply) to the target's working tree
+         - first shows the list of files and asks for confirmation,
+         - saves the target's own uncommitted changes as a backup refs/sandbox/backup/<date>,
+      4. after a successful apply removes the helper refs refs/sandbox/head and refs/sandbox/wip, so the
+         snapshot is not visible in the history (e.g. as a "branch" sandbox/wip in Git Extensions / VS Code).
+         They are kept when the changes were not applied (-NoApply, declined, conflict) - files can be taken from them.
 
-    Skrypt nie uruchamia gita w repozytorium zmodyfikowanym w Sandboxie - czyta tylko plik bundle.
+    The script does not run git in the repository modified in the Sandbox - it only reads the bundle file.
 
 .PARAMETER Name
-    Nazwa projektu (folder w E:\SandBox\Projects).
+    Project name (folder in E:\SandBox\Projects).
 
 .PARAMETER Target
-    Repozytorium docelowe. Domyslnie z ProjectMap.json (zapisane przez Copy-ProjectToSandbox.ps1).
+    Target repository. Default: from ProjectMap.json (saved by Copy-ProjectToSandbox.ps1).
 
 .PARAMETER FastForward
-    Jesli Sandbox ma nowe commity na tej samej galezi - przesun galaz celu (merge --ff-only).
+    If the Sandbox has new commits on the same branch - move the target's branch (merge --ff-only).
 
 .PARAMETER ThreeWay
-    Jesli zmiany nie nakladaja sie czysto - uzyj git apply --3way (konflikty do rozwiazania recznie).
+    If the changes do not apply cleanly - use git apply --3way (conflicts to be resolved manually).
 
 .PARAMETER NoApply
-    Tylko git fetch, bez nakladania niezatwierdzonych zmian.
+    Only git fetch, without applying the uncommitted changes.
 
 .PARAMETER Yes
-    Nie pytaj o potwierdzenie.
+    Do not ask for confirmation.
 
 .EXAMPLE
-    E:\SandBox\Import-SandboxWork.ps1 MojProjekt
+    E:\SandBox\Import-SandboxWork.ps1 MyProject
 .EXAMPLE
-    E:\SandBox\Import-SandboxWork.ps1 MojProjekt -FastForward -ThreeWay
+    E:\SandBox\Import-SandboxWork.ps1 MyProject -FastForward -ThreeWay
 #>
 [CmdletBinding()]
 param(
@@ -49,11 +49,11 @@ param(
     [switch]$ThreeWay,
     [switch]$NoApply,
     [switch]$Yes,
-    [string]$Root      # folder srodowiska - domyslnie tam, gdzie lezy ten skrypt
+    [string]$Root      # environment folder - defaults to where this script is located
 )
 
 $ErrorActionPreference = 'Stop'
-# $PSScriptRoot jako wartosc domyslna w param() jest pusty w Windows PowerShell 5.1 - ustalamy tutaj.
+# $PSScriptRoot as a default value in param() is empty in Windows PowerShell 5.1 - resolve it here.
 if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 $Git = (Get-Command git.exe -ErrorAction SilentlyContinue).Source
@@ -61,11 +61,11 @@ if (-not $Git) { $Git = Join-Path $Root 'Tools\Git\cmd\git.exe' }
 
 function Invoke-Git {
     $out = & $Git @args
-    if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') - kod $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') - exit code $LASTEXITCODE" }
     $out
 }
 
-if ($Name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw "Niepoprawna nazwa projektu: '$Name'." }
+if ($Name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw "Invalid project name: '$Name'." }
 
 $ExportDir = Join-Path $Root 'Projects\.sandbox-export'
 $bundle    = Join-Path $ExportDir "$Name.bundle"
@@ -73,17 +73,17 @@ $infoFile  = Join-Path $ExportDir "$Name.json"
 $MapFile   = Join-Path $Root 'ProjectMap.json'
 
 if (-not (Test-Path -LiteralPath $bundle)) {
-    throw "Brak $bundle. Najpierw w Sandboxie uruchom skrot 'Eksportuj zmiany' (C:\SandBox\Scripts\Export-SandboxWork.ps1)."
+    throw "Missing $bundle. First run the 'Export changes' shortcut in the Sandbox (C:\SandBox\Scripts\Export-SandboxWork.ps1)."
 }
 
 if (-not $Target -and (Test-Path $MapFile)) {
     $entry = (Get-Content $MapFile -Raw | ConvertFrom-Json).$Name
     if ($entry) { $Target = $entry.target }
 }
-if (-not $Target) { throw "Nie znam folderu docelowego dla '$Name' - podaj -Target." }
+if (-not $Target) { throw "Unknown target folder for '$Name' - pass -Target." }
 $Target = (Invoke-Git -C $Target rev-parse --show-toplevel) -replace '/', '\'
 
-# Plik .json pochodzi z Sandboxa - traktujemy go jako niezaufany (tylko informacyjnie + walidacja).
+# The .json file comes from the Sandbox - treat it as untrusted (informational only + validation).
 $sbBranch = $null
 $exportedAt = '?'
 if (Test-Path -LiteralPath $infoFile) {
@@ -94,13 +94,13 @@ if (Test-Path -LiteralPath $infoFile) {
             & $Git check-ref-format --branch ([string]$info.branch) | Out-Null
             if ($LASTEXITCODE -eq 0) { $sbBranch = [string]$info.branch }
         }
-    } catch { Write-Warning "Nie udalo sie odczytac $infoFile - pomijam." }
+    } catch { Write-Warning "Failed to read $infoFile - skipping." }
 }
 
-Write-Host "Projekt : $Name  (eksport z Sandboxa: $exportedAt)" -ForegroundColor Cyan
-Write-Host "Cel     : $Target"
+Write-Host "Project : $Name  (exported from the Sandbox: $exportedAt)" -ForegroundColor Cyan
+Write-Host "Target  : $Target"
 
-# --- 1. git fetch z bundla ---------------------------------------------------------------
+# --- 1. git fetch from the bundle ---------------------------------------------------------
 Invoke-Git -C $Target bundle verify -q $bundle | Out-Null
 Invoke-Git -C $Target fetch --no-tags $bundle `
     '+refs/heads/*:refs/remotes/sandbox/*' '+refs/sandbox/head:refs/sandbox/head' '+refs/sandbox/wip:refs/sandbox/wip'
@@ -111,56 +111,56 @@ $tHead  = Invoke-Git -C $Target rev-parse 'HEAD^{commit}'
 $tBranch = & $Git -C $Target symbolic-ref --short -q HEAD
 if ($LASTEXITCODE -ne 0) { $tBranch = $null }
 
-Write-Host "Galaz w Sandboxie: $(if ($sbBranch) { $sbBranch } else { '?' }), w celu: $(if ($tBranch) { $tBranch } else { '(odlaczony HEAD)' })"
+Write-Host "Branch in the Sandbox: $(if ($sbBranch) { $sbBranch } else { '?' }), in the target: $(if ($tBranch) { $tBranch } else { '(detached HEAD)' })"
 
-# Pomocnicze refy migawki - usuwane, gdy nie sa juz potrzebne (inaczej narzedzia Git pokazuja
-# migawke jako osobna galaz z niezatwierdzonymi zmianami). Obiekty i tak zostaja w reflogu/bazie do gc.
+# Helper snapshot refs - removed when no longer needed (otherwise Git tools show the snapshot
+# as a separate branch with uncommitted changes). The objects stay in the reflog/database until gc anyway.
 function Remove-SandboxRefs {
     foreach ($ref in 'refs/sandbox/wip', 'refs/sandbox/head') {
         & $Git -C $Target update-ref -d $ref 2>$null
     }
 }
 
-# --- 2. Commity z Sandboxa -----------------------------------------------------------------
+# --- 2. Commits from the Sandbox ------------------------------------------------------------
 if ($sbHead -ne $tHead) {
     & $Git -C $Target merge-base --is-ancestor $tHead $sbHead
     $canFastForward = ($LASTEXITCODE -eq 0)
     $newCommits = Invoke-Git -C $Target log --oneline --no-decorate --no-color "$tHead..$sbHead"
     if ($newCommits) {
-        Write-Host "`nNowe commity z Sandboxa:" -ForegroundColor Cyan
+        Write-Host "`nNew commits from the Sandbox:" -ForegroundColor Cyan
         $newCommits | ForEach-Object { Write-Host "  $_" }
     }
 
     if ($FastForward -and $canFastForward -and $tBranch -and $tBranch -eq $sbBranch) {
-        Write-Host "Przesuwam galaz $tBranch (fast-forward)..."
+        Write-Host "Moving branch $tBranch (fast-forward)..."
         Invoke-Git -C $Target merge --ff-only $sbHead
     } elseif ($FastForward -and -not $canFastForward) {
-        Write-Warning "Historia w Sandboxie i w celu sie rozeszla - fast-forward niemozliwy. Scal recznie: git merge sandbox/$sbBranch"
+        Write-Warning "The histories in the Sandbox and in the target have diverged - fast-forward not possible. Merge manually: git merge sandbox/$sbBranch"
     } elseif ($FastForward) {
-        Write-Warning "Galaz celu ($tBranch) rozni sie od galezi w Sandboxie ($sbBranch) - pomijam fast-forward."
+        Write-Warning "The target branch ($tBranch) differs from the branch in the Sandbox ($sbBranch) - skipping fast-forward."
     } else {
-        Write-Host "Commity sa dostepne jako sandbox/<galaz> (np. git merge --ff-only sandbox/$sbBranch) albo uzyj -FastForward." -ForegroundColor DarkGray
+        Write-Host "Commits are available as sandbox/<branch> (e.g. git merge --ff-only sandbox/$sbBranch), or use -FastForward." -ForegroundColor DarkGray
     }
 }
 
-# --- 3. Niezatwierdzone zmiany -------------------------------------------------------------
-if ($NoApply) { Write-Host "`nPominieto nakladanie zmian (-NoApply). Migawka: refs/sandbox/wip"; return }
-if ($wip -eq $sbHead) { Remove-SandboxRefs; Write-Host "`nW Sandboxie nie bylo niezatwierdzonych zmian." -ForegroundColor Green; return }
+# --- 3. Uncommitted changes ----------------------------------------------------------------
+if ($NoApply) { Write-Host "`nSkipped applying changes (-NoApply). Snapshot: refs/sandbox/wip"; return }
+if ($wip -eq $sbHead) { Remove-SandboxRefs; Write-Host "`nThere were no uncommitted changes in the Sandbox." -ForegroundColor Green; return }
 
-Write-Host "`nNiezatwierdzone zmiany z Sandboxa:" -ForegroundColor Cyan
+Write-Host "`nUncommitted changes from the Sandbox:" -ForegroundColor Cyan
 Invoke-Git -C $Target diff --stat --no-color --no-ext-diff $sbHead $wip | ForEach-Object { Write-Host "  $_" }
 
 if (-not $Yes) {
-    $answer = Read-Host "`nNalozyc te zmiany na katalog roboczy $Target ? [t/N]"
-    if ($answer -notmatch '^(t|tak|y|yes)$') { Write-Host 'Przerwano. Zmiany sa dostepne w refs/sandbox/wip.'; return }
+    $answer = Read-Host "`nApply these changes to the working tree of $Target ? [y/N]"
+    if ($answer -notmatch '^(t|tak|y|yes)$') { Write-Host 'Aborted. The changes are available in refs/sandbox/wip.'; return }
 }
 
-# Kopia wlasnych niezatwierdzonych zmian celu (pliki sledzone) - do przywrocenia: git stash apply <sha>
+# Backup of the target's own uncommitted changes (tracked files) - to restore: git stash apply <sha>
 $backup = Invoke-Git -C $Target stash create
 if ($backup) {
     $backupRef = 'refs/sandbox/backup/' + (Get-Date -Format 'yyyyMMdd-HHmmss')
     Invoke-Git -C $Target update-ref $backupRef $backup
-    Write-Host "Kopia zmian w celu: $backupRef (przywracanie: git stash apply $backupRef)" -ForegroundColor DarkGray
+    Write-Host "Backup of changes in the target: $backupRef (restore: git stash apply $backupRef)" -ForegroundColor DarkGray
 }
 
 $patch = Join-Path $env:TEMP "sandbox-import-$Name-$PID.patch"
@@ -172,18 +172,18 @@ try {
     if ($LASTEXITCODE -eq 0) {
         Invoke-Git -C $Target apply $patch
         Remove-SandboxRefs
-        Write-Host "`nZmiany nalozone na katalog roboczy (nic nie zostalo zacommitowane)." -ForegroundColor Green
+        Write-Host "`nChanges applied to the working tree (nothing was committed)." -ForegroundColor Green
     } elseif ($ThreeWay) {
-        Write-Warning 'Zmiany nie nakladaja sie czysto - probuje git apply --3way.'
+        Write-Warning 'The changes do not apply cleanly - trying git apply --3way.'
         & $Git -C $Target apply --3way $patch
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning 'Wystapily konflikty - rozwiaz je recznie (git status). Uwaga: --3way dodaje zmiany do indeksu.'
+            Write-Warning 'Conflicts occurred - resolve them manually (git status). Note: --3way adds the changes to the index.'
             exit 1
         }
         Remove-SandboxRefs
-        Write-Host "`nZmiany nalozone (3-way). Uwaga: --3way dodaje zmiany do indeksu (git restore --staged .)." -ForegroundColor Green
+        Write-Host "`nChanges applied (3-way). Note: --3way adds the changes to the index (git restore --staged .)." -ForegroundColor Green
     } else {
-        Write-Warning "Zmiany nie nakladaja sie czysto. Uruchom ponownie z -ThreeWay albo pobierz pliki recznie z refs/sandbox/wip (git checkout refs/sandbox/wip -- <plik>)."
+        Write-Warning "The changes do not apply cleanly. Run again with -ThreeWay, or take the files manually from refs/sandbox/wip (git checkout refs/sandbox/wip -- <file>)."
         exit 1
     }
 } finally {

@@ -1,12 +1,12 @@
-# Pobierane przez Install-SandboxTools.ps1
+# Downloaded by Install-SandboxTools.ps1
 /Tools/
 /_download/
 
-# Dane osobiste: logowanie Claude, .gitconfig, rozszerzenia VS Code
+# Personal data: Claude login, .gitconfig, VS Code extensions
 /Home/
 
-# Projekty z Sandboxa
+# Projects from the Sandbox
 /Projects/
 
-# Kopia skryptu startowego tworzona przez instalator
+# Copy of the startup script created by the installer
 /Scripts/

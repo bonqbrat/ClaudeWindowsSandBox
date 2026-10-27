@@ -1,41 +1,41 @@
 <#
 .SYNOPSIS
-    Klonuje projekt do E:\SandBox\Projects, aby pracowac nad nim w Windows Sandbox.
+    Clones a project into E:\SandBox\Projects to work on it in Windows Sandbox.
 
 .DESCRIPTION
-    Uruchamiany NA HOSCIE. Zrodlem moze byc:
-      - lokalne repozytorium (np. D:\Repos\MojProjekt) - klon bez hardlinkow, wiec Sandbox
-        nie ma dostepu do plikow oryginalu; origin w kopii wskazuje na zdalne repo oryginalu,
-      - adres URL repozytorium (klonowanie z uzyciem poswiadczen hosta; poswiadczenia
-        NIE trafiaja do Sandboxa, a login/token z adresu https jest usuwany).
+    Run ON THE HOST. The source can be:
+      - a local repository (e.g. D:\Repos\MyProject) - cloned without hardlinks, so the Sandbox
+        has no access to the original's files; origin in the copy points to the original's remote repo,
+      - a repository URL (cloned using the host's credentials; the credentials do
+        NOT reach the Sandbox, and a login/token in an https URL is removed).
 
-    Powiazanie nazwa -> folder docelowy zapisywane jest w E:\SandBox\ProjectMap.json
-    (poza folderami mapowanymi do Sandboxa, wiec Sandbox nie moze go zmienic).
-    Z niego korzysta Import-SandboxWork.ps1.
+    The name -> target folder mapping is saved in E:\SandBox\ProjectMap.json
+    (outside the folders mapped into the Sandbox, so the Sandbox cannot change it).
+    It is used by Import-SandboxWork.ps1.
 
 .PARAMETER Source
-    Sciezka lokalnego repozytorium albo URL.
+    Path to a local repository or a URL.
 
 .PARAMETER Name
-    Nazwa folderu w Projects (domyslnie nazwa repozytorium).
+    Folder name in Projects (default: the repository name).
 
 .PARAMETER Target
-    Folder na hoscie, do ktorego Import-SandboxWork.ps1 przeniesie zmiany.
-    Domyslnie: Source, jesli jest lokalnym repozytorium.
+    Folder on the host into which Import-SandboxWork.ps1 will bring the changes.
+    Default: Source, if it is a local repository.
 
 .PARAMETER Branch
-    Galaz do pobrania (domyslnie biezaca galaz zrodla / domyslna galaz zdalnego repo).
+    Branch to check out (default: the source's current branch / the remote repo's default branch).
 
 .PARAMETER Force
-    Jesli projekt juz jest w Projects - nadpisz go bez pytania (z kopia zapasowa, chyba ze -NoBackup).
+    If the project is already in Projects - overwrite it without asking (with a backup, unless -NoBackup).
 
 .PARAMETER NoBackup
-    Przy nadpisywaniu usun poprzednia kopie zamiast przenosic ja do Projects\.backup (bez pytania o kopie).
+    When overwriting, delete the previous copy instead of moving it to Projects\.backup (no backup prompt).
 
 .EXAMPLE
-    E:\SandBox\Copy-ProjectToSandbox.ps1 D:\Repos\MojProjekt
+    E:\SandBox\Copy-ProjectToSandbox.ps1 D:\Repos\MyProject
 .EXAMPLE
-    E:\SandBox\Copy-ProjectToSandbox.ps1 https://gitlab.example.com/zespol/projekt.git -Target D:\Repos\projekt
+    E:\SandBox\Copy-ProjectToSandbox.ps1 https://gitlab.example.com/team/project.git -Target D:\Repos\project
 #>
 [CmdletBinding()]
 param(
@@ -46,11 +46,11 @@ param(
     [switch]$RecurseSubmodules,
     [switch]$Force,
     [switch]$NoBackup,
-    [string]$Root      # folder srodowiska - domyslnie tam, gdzie lezy ten skrypt
+    [string]$Root      # environment folder - defaults to where this script is located
 )
 
 $ErrorActionPreference = 'Stop'
-# $PSScriptRoot jako wartosc domyslna w param() jest pusty w Windows PowerShell 5.1 - ustalamy tutaj.
+# $PSScriptRoot as a default value in param() is empty in Windows PowerShell 5.1 - resolve it here.
 if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 $Git = (Get-Command git.exe -ErrorAction SilentlyContinue).Source
@@ -58,7 +58,7 @@ if (-not $Git) { $Git = Join-Path $Root 'Tools\Git\cmd\git.exe' }
 
 function Invoke-Git {
     $out = & $Git @args
-    if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') - kod $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') - exit code $LASTEXITCODE" }
     $out
 }
 
@@ -69,53 +69,53 @@ $isLocal = Test-Path -LiteralPath $Source -PathType Container
 if ($isLocal) {
     $Source = (Invoke-Git -C $Source rev-parse --show-toplevel) -replace '/', '\'
     if (-not $Target) { $Target = $Source }
-    $originUrl = & $Git -C $Source config --get remote.origin.url   # bez komunikatu, gdy origin nie istnieje
+    $originUrl = & $Git -C $Source config --get remote.origin.url   # no message when origin does not exist
     if ($LASTEXITCODE -ne 0) { $originUrl = $null }
 }
 if (-not $Name) { $Name = (Split-Path ($Source.TrimEnd('\', '/')) -Leaf) -replace '\.git$', '' }
-if ($Name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw "Niepoprawna nazwa projektu: '$Name' (uzyj -Name)." }
+if ($Name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw "Invalid project name: '$Name' (use -Name)." }
 
 $dest = Join-Path $Projects $Name
 if (Test-Path -LiteralPath $dest) {
-    # Celowo bez "git status": host nie uruchamia gita w repozytorium zmienionym w Sandboxie.
-    Write-Warning "Projekt $Name jest juz w $dest."
-    Write-Host '  Zmiany wprowadzone w Sandboxie, ktore nie zostaly wyeksportowane i zaimportowane, nie trafia do nowej kopii.' -ForegroundColor Yellow
+    # Deliberately no "git status": the host does not run git in a repository modified in the Sandbox.
+    Write-Warning "Project $Name is already in $dest."
+    Write-Host '  Changes made in the Sandbox that have not been exported and imported will not be in the new copy.' -ForegroundColor Yellow
     $infoFile = Join-Path $Projects ".sandbox-export\$Name.json"
-    $lastExport = 'nigdy'
+    $lastExport = 'never'
     if (Test-Path -LiteralPath $infoFile) {
         try { $lastExport = [string](Get-Content -LiteralPath $infoFile -Raw | ConvertFrom-Json).exportedAt } catch { }
     }
-    Write-Host "  Ostatni eksport z Sandboxa: $($lastExport.Substring(0, [Math]::Min(40, $lastExport.Length)))"
+    Write-Host "  Last export from the Sandbox: $($lastExport.Substring(0, [Math]::Min(40, $lastExport.Length)))"
 
     if (-not $Force) {
-        $answer = Read-Host "Nadpisac $dest nowym klonem z $Source ? [t/N]"
-        if ($answer -notmatch '^(t|tak|y|yes)$') { Write-Host 'Przerwano - nic nie zostalo zmienione.'; return }
+        $answer = Read-Host "Overwrite $dest with a new clone of $Source ? [y/N]"
+        if ($answer -notmatch '^(t|tak|y|yes)$') { Write-Host 'Aborted - nothing was changed.'; return }
         if (-not $NoBackup) {
-            # Domyslnie TAK (Enter) - kopia jest natychmiastowa i pozwala odzyskac zmiany.
-            $answer = Read-Host "Zachowac poprzednia kopie w $Projects\.backup ? [T/n]"
+            # Default YES (Enter) - the backup is instant and allows recovering changes.
+            $answer = Read-Host "Keep the previous copy in $Projects\.backup ? [Y/n]"
             if ($answer -match '^(n|nie|no)$') { $NoBackup = $true }
         }
     }
 
     try {
         if ($NoBackup) {
-            # rd /s /q nie wchodzi w dowiazania (junction/symlink) - usuwa tylko je same, nie ich cel.
+            # rd /s /q does not descend into links (junction/symlink) - it removes only the links, not their targets.
             & cmd.exe /c rd /s /q $dest
-            if (Test-Path -LiteralPath $dest) { throw 'nie udalo sie usunac wszystkich plikow' }
-            Write-Host '  Poprzednia kopia usunieta.'
+            if (Test-Path -LiteralPath $dest) { throw 'failed to delete all files' }
+            Write-Host '  Previous copy deleted.'
         } else {
             $backupDir = Join-Path $Projects '.backup'
             New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
             $backup = Join-Path $backupDir ('{0}-{1}' -f $Name, (Get-Date -Format 'yyyyMMdd-HHmmss'))
-            Move-Item -LiteralPath $dest -Destination $backup   # zmiana nazwy - natychmiastowa
-            Write-Host "  Poprzednia kopia przeniesiona do: $backup" -ForegroundColor DarkGray
+            Move-Item -LiteralPath $dest -Destination $backup   # rename - instant
+            Write-Host "  Previous copy moved to: $backup" -ForegroundColor DarkGray
         }
     } catch {
-        throw "Nie udalo sie zwolnic folderu $dest ($($_.Exception.Message)). Zamknij w Sandboxie programy korzystajace z projektu (VS Code, terminal, Claude) albo zamknij Sandbox i sprobuj ponownie."
+        throw "Failed to free the folder $dest ($($_.Exception.Message)). Close the programs using the project in the Sandbox (VS Code, terminal, Claude) or close the Sandbox and try again."
     }
 }
 
-# --- Klonowanie ------------------------------------------------------------------
+# --- Cloning ---------------------------------------------------------------------
 $cloneArgs = @('clone')
 if ($isLocal)           { $cloneArgs += '--no-hardlinks' }
 if ($Branch)            { $cloneArgs += '--branch', $Branch }
@@ -123,11 +123,11 @@ if ($RecurseSubmodules) { $cloneArgs += '--recurse-submodules' }
 $cloneArgs += '--', $Source, $dest
 
 New-Item -ItemType Directory -Force -Path $Projects | Out-Null
-Write-Host "Klonuje $Source -> $dest" -ForegroundColor Cyan
+Write-Host "Cloning $Source -> $dest" -ForegroundColor Cyan
 Invoke-Git @cloneArgs
 
-# origin w kopii: zdalne repo oryginalu (sciezka hosta i tak jest niedostepna w Sandboxie),
-# bez loginu/tokenu w adresie https.
+# origin in the copy: the original's remote repo (the host path is unreachable in the Sandbox anyway),
+# without a login/token in the https URL.
 $url = if ($isLocal) { $originUrl } else { $Source }
 if ($url) {
     $url = $url -replace '^(https?://)[^/@]*@', '$1'
@@ -136,7 +136,7 @@ if ($url) {
     Invoke-Git -C $dest remote remove origin
 }
 
-# --- Mapa projektow ----------------------------------------------------------------
+# --- Project map -------------------------------------------------------------------
 $map = @{}
 if (Test-Path $MapFile) {
     (Get-Content $MapFile -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $map[$_.Name] = $_.Value }
@@ -144,12 +144,12 @@ if (Test-Path $MapFile) {
 $map[$Name] = [ordered]@{ source = $Source; target = $Target; clonedAt = (Get-Date).ToString('s') }
 $map | ConvertTo-Json | Set-Content -Path $MapFile -Encoding UTF8
 
-# Biezacy projekt: skroty w Sandboxie (Claude Code, VS Code, Git Bash) otwieraja ten folder.
-# Scripts\ jest w Sandboxie tylko do odczytu, wiec Sandbox nie moze tej wartosci zmienic.
+# Current project: the shortcuts in the Sandbox (Claude Code, VS Code, Git Bash) open this folder.
+# Scripts\ is read-only in the Sandbox, so the Sandbox cannot change this value.
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'Scripts') | Out-Null
 Set-Content -Path (Join-Path $Root 'Scripts\last-project.txt') -Value $Name -Encoding ASCII
 
-# --- Tozsamosc Git w Sandboxie (Home\.gitconfig), jesli jeszcze nie ustawiona ----------
+# --- Git identity in the Sandbox (Home\.gitconfig), if not set yet ----------------------
 $sbGitConfig = Join-Path $Root 'Home\.gitconfig'
 foreach ($key in 'user.name', 'user.email') {
     $current = & $Git config --file $sbGitConfig $key
@@ -157,14 +157,14 @@ foreach ($key in 'user.name', 'user.email') {
         $value = & $Git config --global $key
         if ($value) {
             Invoke-Git config --file $sbGitConfig $key $value
-            Write-Host "  Ustawiono $key w Home\.gitconfig"
+            Write-Host "  Set $key in Home\.gitconfig"
         }
     }
 }
 
-Write-Host "`nGotowe. W Sandboxie: C:\SandBox\Projects\$Name" -ForegroundColor Green
+Write-Host "`nDone. In the Sandbox: C:\SandBox\Projects\$Name" -ForegroundColor Green
 if ($Target) {
-    Write-Host "Zmiany wroca do: $Target  (Export-SandboxWork w Sandboxie, potem Import-SandboxWork.ps1 $Name)"
+    Write-Host "Changes will return to: $Target  (Export-SandboxWork in the Sandbox, then Import-SandboxWork.ps1 $Name)"
 } else {
-    Write-Host 'Folder docelowy nie jest ustawiony - przy imporcie podaj -Target.' -ForegroundColor Yellow
+    Write-Host 'Target folder is not set - pass -Target when importing.' -ForegroundColor Yellow
 }

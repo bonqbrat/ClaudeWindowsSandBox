@@ -110,7 +110,7 @@
             "command": "C:/SandBox/Tools/Python/python.exe",
             "args": ["C:/Program Files/ClaudeCode/hooks/guard.py"],
             "timeout": 15,
-            "statusMessage": "Sprawdzanie reguł‚ bezpieczeństwa..."
+            "statusMessage": "Checking security rules..."
           }
         ]
       }

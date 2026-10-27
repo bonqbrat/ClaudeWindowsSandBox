@@ -18,7 +18,7 @@
       <ReadOnly>true</ReadOnly>
     </MappedFolder>
     <MappedFolder>
-      <!-- Managed settings i hooki Claude Code: najwyzszy priorytet, Sandbox nie moze ich zmienic -->
+      <!-- Claude Code managed settings and hooks: highest priority, the Sandbox cannot change them -->
       <HostFolder>E:\SandBox\Settings\ClaudeCode</HostFolder>
       <SandboxFolder>C:\Program Files\ClaudeCode</SandboxFolder>
       <ReadOnly>true</ReadOnly>

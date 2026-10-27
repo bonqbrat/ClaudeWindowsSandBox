@@ -1,34 +1,34 @@
 """
-PreToolUse guard - globalne reguly bezpieczenstwa Claude Code.
-Dziala w kazdym trybie (rowniez auto): zwraca "deny" albo "ask" (wymusza reczne potwierdzenie).
-Fail-closed: blad hooka albo nieczytelne wejscie = deny.
+PreToolUse guard - global Claude Code security rules.
+Works in every mode (including auto): returns "deny" or "ask" (forces manual confirmation).
+Fail-closed: a hook error or unreadable input = deny.
 
-Reguly:
-  DENY  - commit / merge / rebase / cherry-pick na branchu release
-  DENY  - push / merge do brancha release
-  DENY  - tworzenie Merge Requestow / Pull Requestow
-  DENY  - edycja funkcji/ustawien systemowych (rejestr, uslugi, katalogi systemowe, podnoszenie uprawnien)
-  DENY  - usuwanie/edycja danych na zasobach/dyskach zdalnych
-  DENY  - modyfikacja wlasnych zabezpieczen (ten hook, ~/.claude/settings*.json, ~/.claude/CLAUDE.md,
-          ~/.claude.json, managed-settings, disableAllHooks) oraz zmiana trybu uprawnien sesji
-  ASK   - kazdy git push
-  ASK   - instalowanie aplikacji/pakietow (rowniez niejawny restore: dotnet build/run/test...), skrypty z sieci
-  ASK   - odczyt danych zwiazanych z bezpieczenstwem (hasla, klucze, tokeny)
-  ASK   - wysylanie jakichkolwiek danych do internetu (rowniez git clone/fetch/pull, akcje w przegladarce)
-  ASK   - trwale zmiany srodowiska (profile powloki, autostart, git config --global, hooki git, .mcp.json)
-  ASK   - agenci/sesje w chmurze (tam ten hook nie dziala)
-  ASK   - odczyt / zapis / usuwanie plikow POZA katalogiem projektu (CLAUDE_PROJECT_DIR), %TEMP%,
-          EXTRA_ALLOWED_DIRS i permissions.additionalDirectories z ~/.claude/settings.json
-          (narzedzia Read/Grep/Glob/Edit/Write oraz sciezki w poleceniach powloki; sciezki sa
-          rozwiazywane przez realpath: .., ~, zmienne, /c/..., symlinki, junctiony, nazwy 8.3)
-  ASK   - tworzenie symlinkow/junctionow/hardlinkow oraz zapis/usuwanie na sciezce ze zmiennej
+Rules:
+  DENY  - commit / merge / rebase / cherry-pick on a release branch
+  DENY  - push / merge to a release branch
+  DENY  - creating Merge Requests / Pull Requests
+  DENY  - editing system features/settings (registry, services, system folders, privilege elevation)
+  DENY  - deleting/editing data on remote resources/drives
+  DENY  - modifying its own safeguards (this hook, ~/.claude/settings*.json, ~/.claude/CLAUDE.md,
+          ~/.claude.json, managed-settings, disableAllHooks) and changing the session permission mode
+  ASK   - every git push
+  ASK   - installing applications/packages (including implicit restore: dotnet build/run/test...), scripts from the web
+  ASK   - reading security-related data (passwords, keys, tokens)
+  ASK   - sending any data to the internet (including git clone/fetch/pull, browser actions)
+  ASK   - persistent environment changes (shell profiles, autostart, git config --global, git hooks, .mcp.json)
+  ASK   - cloud agents/sessions (this hook does not work there)
+  ASK   - reading / writing / deleting files OUTSIDE the project folder (CLAUDE_PROJECT_DIR), %TEMP%,
+          EXTRA_ALLOWED_DIRS and permissions.additionalDirectories from ~/.claude/settings.json
+          (Read/Grep/Glob/Edit/Write tools and paths in shell commands; paths are
+          resolved via realpath: .., ~, variables, /c/..., symlinks, junctions, 8.3 names)
+  ASK   - creating symlinks/junctions/hardlinks and writing/deleting at a path taken from a variable
 
-Granica projektu to heurystyka (regexy na tekscie polecenia) - nie zastepuje sandboxa systemowego.
-W tresci skryptow uruchamianych z plikow granica projektu NIE jest sprawdzana.
+The project boundary is a heuristic (regexes on the command text) - it does not replace a system sandbox.
+The project boundary is NOT checked inside scripts run from files.
 
-Skrypty uruchamiane z plikow (python x.py, .\\x.ps1, bash x.sh ...) oraz -EncodedCommand
-sa odczytywane i sprawdzane pod katem regul DENY i git push.
-Decyzje ask/deny sa dopisywane do ~/.claude/hooks/guard.log.
+Scripts run from files (python x.py, .\\x.ps1, bash x.sh ...) and -EncodedCommand
+are read and checked against the DENY rules and git push.
+ask/deny decisions are appended to ~/.claude/hooks/guard.log.
 """
 import base64
 import json
@@ -73,10 +73,10 @@ def finish(data):
     asks = list(dict.fromkeys(r for d, r in HITS if d == "ask"))
     if denies:
         decision = "deny"
-        reason = "; ".join(denies) + " - ZABRONIONE przez globalne reguly uzytkownika. Popros uzytkownika o wykonanie tego recznie."
+        reason = "; ".join(denies) + " - FORBIDDEN by the user's global rules. Ask the user to do this manually."
     elif asks:
         decision = "ask"
-        reason = "; ".join(asks) + " - wymaga recznego potwierdzenia uzytkownika."
+        reason = "; ".join(asks) + " - requires manual confirmation by the user."
     else:
         sys.exit(0)
     log(decision, reason, data)
@@ -102,7 +102,7 @@ def current_branch(cwd):
 
 
 def git_dirs(cmd, cwd):
-    """Katalogi, w ktorych moze dzialac polecenie: cwd, cele `cd`, argumenty `git -C`."""
+    """Folders in which the command may operate: cwd, `cd` targets, `git -C` arguments."""
     dirs = [cwd]
     for m in re.finditer(r"(?:^|[;&|]\s*)(?:cd|Set-Location|pushd)\s+(?:/d\s+)?(\"[^\"]+\"|'[^']+'|\S+)", cmd, re.I):
         d = m.group(1).strip("\"'")
@@ -132,7 +132,7 @@ NET_LETTERS = network_drive_letters()
 
 
 def norm(p):
-    """Normalizuje sciezke: ~, $HOME, %USERPROFILE%, /c/... -> c:\\..., male litery, backslashe."""
+    """Normalizes a path: ~, $HOME, %USERPROFILE%, /c/... -> c:\\..., lowercase, backslashes."""
     p = (p or "").strip().strip("\"'")
     p = re.sub(r"^(~|\$HOME|\$\{HOME\}|\$env:USERPROFILE|%USERPROFILE%)(?=[\\/]|$)", lambda m: HOME, p, flags=re.I)
     m = re.match(r"^/([A-Za-z])(/|$)", p)
@@ -153,7 +153,7 @@ TEMP_DIR = tempfile.gettempdir()
 
 
 def real_path(p, base):
-    """Kanoniczna sciezka: ~, zmienne, /c/..., /tmp, .., symlinki, junctiony, nazwy 8.3."""
+    """Canonical path: ~, variables, /c/..., /tmp, .., symlinks, junctions, 8.3 names."""
     t = os.path.expandvars(os.path.expanduser((p or "").strip().strip("\"'")))
     if IS_WIN:
         if re.match(r"^[\\/]tmp([\\/]|$)", t, re.I):
@@ -167,7 +167,7 @@ def real_path(p, base):
 
 
 def path_variants(p, cwd=None):
-    """Warianty znormalizowanej sciezki: dosloswny, bezwzgledny, po realpath."""
+    """Variants of the normalized path: literal, absolute, after realpath."""
     out = {norm(p)}
     if cwd:
         out.add(abs_norm(p, cwd))
@@ -185,7 +185,7 @@ def is_remote_path(p):
     p = p.strip("\"'")
     if p.startswith("\\\\") or re.match(r"^//[^/]", p):
         return True
-    # "X:\..." albo git-bashowe "/x/..."
+    # "X:\..." or Git Bash style "/x/..."
     m = re.match(r"^([A-Za-z]):", p) or re.match(r"^/([A-Za-z])(/|$)", p)
     return bool(m and m.group(1).upper() in NET_LETTERS)
 
@@ -211,7 +211,7 @@ def is_system_path(p, cwd=None):
     return any(n == d or n.startswith(d + "\\") for n in path_variants(p, cwd) for d in SYSTEM_DIRS)
 
 
-# --- ochrona wlasnych zabezpieczen
+# --- protection of its own safeguards
 _HOMES = {norm(HOME), norm(os.path.realpath(HOME))}
 CLAUDE_DIRS = {h + "\\.claude" for h in _HOMES}
 PROTECTED_EXACT = {d + s for d in CLAUDE_DIRS for s in ("\\settings.json", "\\settings.local.json", "\\claude.md",
@@ -221,7 +221,7 @@ PROTECTED_DIRS = [d + "\\hooks" for d in CLAUDE_DIRS]
 SELF_KEYWORD_RE = re.compile(r"guard\.py|disableAllHooks|allowManagedHooksOnly|managed-settings|managed-mcp", re.I)
 PROJECT_SETTINGS_RE = re.compile(r"\\\.claude\\settings(\.local)?\.json$")
 
-# --- trwale zmiany srodowiska (autostart, profile powloki, konfiguracja git)
+# --- persistent environment changes (autostart, shell profiles, git configuration)
 PERSIST_RE = re.compile(
     r"\\start menu\\programs\\startup\\|\\(windows)?powershell\\[^\\]*profile\.ps1$|\\profile\.ps1$|"
     r"\\\.(bashrc|bash_profile|bash_login|profile|zshrc|zprofile|gitconfig)$|\\\.git\\hooks\\|"
@@ -312,7 +312,7 @@ INSTALL_RE = re.compile(
     r"claude\s+(plugin|mcp)\s+(install|add)\b)",
     re.I)
 
-# dotnet build/run/test/... bez --no-restore pobiera pakiety NuGet
+# dotnet build/run/test/... without --no-restore downloads NuGet packages
 DOTNET_IMPLICIT_RESTORE_RE = re.compile(r"\bdotnet(\.exe)?\s+(build|run|test|publish|pack|watch)\b", re.I)
 MSBUILD_RESTORE_RE = re.compile(r"\bmsbuild(\.exe)?\b[^\n]*[-/](restore\b|t(arget)?:[^\s]*restore)", re.I)
 BUILD_TOOL_NET_RE = re.compile(r"\b(mvnw?|gradlew?)\b|\bpip\d*\s+download\b|\bdocker\s+(pull|build|run|compose\s+(up|pull|build))\b", re.I)
@@ -356,23 +356,23 @@ def paths_in(cmd):
 
 
 def join_list_args(s):
-    """["reg", "add", "HKLM\\..."] -> reg add HKLM\\...  (wywolania subprocess z lista argumentow)."""
+    """["reg", "add", "HKLM\\..."] -> reg add HKLM\\...  (subprocess calls with an argument list)."""
     return re.sub(r"[\"']\s*,\s*[\"']", " ", s)
 
 
-# ---------------------------------------------------------------- granica projektu
+# ---------------------------------------------------------------- project boundary
 
-# Dodatkowe katalogi dostepne bez pytania (oprocz projektu i %TEMP%). Dopisywane sa tez
-# permissions.additionalDirectories z ~/.claude/settings.json (plik chroniony przez ten hook).
-# Ustawienia projektu (.claude/settings*.json) sa celowo pomijane - Claude moze je zmienic.
+# Additional folders accessible without asking (besides the project and %TEMP%). Also appended are
+# permissions.additionalDirectories from ~/.claude/settings.json (a file protected by this hook).
+# Project settings (.claude/settings*.json) are deliberately ignored - Claude can change them.
 EXTRA_ALLOWED_DIRS = [
-    # os.path.join(HOME, ".claude", "projects"),  # automatyczna pamiec Claude Code
+    # os.path.join(HOME, ".claude", "projects"),  # Claude Code auto memory
     # os.path.join(HOME, ".nuget", "packages"),
 ]
-ALLOWED_ROOTS = []  # ustawiane w init_allowed_roots()
+ALLOWED_ROOTS = []  # set in init_allowed_roots()
 
 PATHLIKE_RE = re.compile(r"^(~|[A-Za-z]:|[\\/])|(\$|%)\S*[\\/]|(^|[\\/=])\.\.([\\/]|$)")
-SWITCH_RE = re.compile(r"^/[A-Za-z?]{1,3}(:\S*)?$")  # przelaczniki cmd: /s /q /d /MT:8
+SWITCH_RE = re.compile(r"^/[A-Za-z?]{1,3}(:\S*)?$")  # cmd switches: /s /q /d /MT:8
 NOISE_PATHS = {"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/stdin", "nul", "nul:", "$null"}
 GLOB_CHARS_RE = re.compile(r"[*?\[{]")
 BARE_VAR_RE = re.compile(r"^\$\{?(?!(null|true|false)\b)[\w:]+\}?$", re.I)
@@ -412,14 +412,14 @@ def init_allowed_roots(cwd):
 
 
 def is_outside(p, base):
-    """True, jesli sciezka wychodzi poza dozwolone katalogi (albo nie da sie jej ustalic)."""
+    """True if the path leads outside the allowed folders (or cannot be determined)."""
     if not ALLOWED_ROOTS:
         return False
     s = (p or "").strip().strip("\"'")
     if not s:
         return False
     if re.search(r"\$|%\w+%", os.path.expandvars(os.path.expanduser(s))):
-        return True  # nierozwiazana zmienna - nie wiadomo dokad prowadzi
+        return True  # unresolved variable - unknown where it leads
     try:
         rp = real_path(s, base)
     except (OSError, ValueError):
@@ -428,13 +428,13 @@ def is_outside(p, base):
         try:
             if os.path.commonpath([rp, r]) == r:
                 return False
-        except ValueError:  # inny dysk
+        except ValueError:  # different drive
             pass
     return True
 
 
 def glob_base(p):
-    """Czesc wzorca przed pierwszym znakiem globa: 'C:/x/**/*.py' -> 'C:/x/'."""
+    """Part of the pattern before the first glob character: 'C:/x/**/*.py' -> 'C:/x/'."""
     s = (p or "").strip().strip("\"'")
     m = GLOB_CHARS_RE.search(s)
     if not m:
@@ -445,7 +445,7 @@ def glob_base(p):
 
 
 def candidate_tokens(cmd):
-    """Tokeny polecenia + tokeny ukryte w cudzyslowach (python -c "...", -Command "...", bash -c "...")."""
+    """Command tokens + tokens hidden in quotes (python -c "...", -Command "...", bash -c "...")."""
     out = []
     for tok in paths_in(cmd):
         t = tok.strip("\"'")
@@ -462,8 +462,8 @@ def outside_paths(cmd, base):
             t = t.split("=", 1)[1]
         if not t or t.lower() in NOISE_PATHS or SWITCH_RE.match(t) or "://" in t:
             continue
-        # sciezki jawnie wychodzace (C:, /, ~, .., zmienne) oraz wzgledne, ktore moga prowadzic
-        # przez symlink/junction w projekcie (zawieraja separator albo istnieja na dysku)
+        # paths explicitly leading outside (C:, /, ~, .., variables) and relative ones that may lead
+        # through a symlink/junction in the project (they contain a separator or exist on disk)
         if not (PATHLIKE_RE.search(t) or re.search(r"[\\/]", t) or os.path.lexists(os.path.join(base, t))):
             continue
         b = glob_base(t)
@@ -487,7 +487,7 @@ def resolve_file(tok, bases):
 
 
 def scan_scripts(c, cwd, depth):
-    """Sprawdza tresc plikow skryptow uruchamianych przez polecenie."""
+    """Checks the contents of script files run by the command."""
     if depth >= MAX_DEPTH or not EXECUTOR_RE.search(c):
         return
     bases = git_dirs(c, cwd)
@@ -499,7 +499,7 @@ def scan_scripts(c, cwd, depth):
             continue
         try:
             if os.path.getsize(p) > MAX_SCRIPT_BYTES:
-                ask(f"Uruchamianie duzego skryptu {tok} (guard nie sprawdzil jego tresci)")
+                ask(f"Running a large script {tok} (guard did not check its contents)")
                 continue
             with open(p, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
@@ -511,13 +511,13 @@ def scan_scripts(c, cwd, depth):
 def check_self_protection(raw, cd, cwd):
     toks = paths_in(raw)
     if re.search(r"disableAllHooks|allowManagedHooksOnly", raw, re.I):
-        deny("Proba wylaczenia hookow Claude Code")
+        deny("Attempt to disable Claude Code hooks")
     if re.search(r"\bclaude\s+config\s+(set|add|remove)\b", raw, re.I):
-        deny("Zmiana konfiguracji Claude Code")
+        deny("Changing the Claude Code configuration")
     writes = DESTRUCTIVE_RE.search(cd) or WRITE_API_RE.search(raw)
     if writes and (any(is_protected_path(t, cwd) for t in toks) or SELF_KEYWORD_RE.search(raw)
                    or re.search(r"(~|HOME\}?|USERPROFILE%?|\\Users\\[^\\\s]+)[\\/]\.claude([\\/](settings|hooks|CLAUDE\.md)|\.json)", raw, re.I)):
-        deny("Modyfikacja zabezpieczen Claude Code (hook/ustawienia/CLAUDE.md)")
+        deny("Modifying Claude Code safeguards (hook/settings/CLAUDE.md)")
 
 
 def check_shell(cmd, cwd, depth=0, script=False):
@@ -528,56 +528,56 @@ def check_shell(cmd, cwd, depth=0, script=False):
     destructive = bool(destructive_re.search(cd))
     toks = paths_in(raw)
 
-    # 0. Ochrona samych zabezpieczen
+    # 0. Protection of the safeguards themselves
     check_self_protection(raw, cd, cwd)
 
-    # 1. Merge Requesty / Pull Requesty
+    # 1. Merge Requests / Pull Requests
     if MR_RE.search(c):
-        deny("Tworzenie Merge Requestow / Pull Requestow")
+        deny("Creating Merge Requests / Pull Requests")
 
-    # 2. Operacje na branchach release
+    # 2. Operations on release branches
     is_push = re.search(r"\bgit\b[^\n;&|]*\bpush\b", c)
     if is_push and RELEASE_RE.search(c):
-        deny("Push do brancha release")
+        deny("Push to a release branch")
     if re.search(r"\bgit\b[^\n;&|]*\b(checkout|switch)\b[^\n;&|]*release", c, re.I) and \
             re.search(r"\bgit\b[^\n;&|]*\b(commit|merge|rebase|cherry-pick|revert|am|pull|push|reset)\b", c):
-        deny("Commit/merge/push na branchu release")
+        deny("Commit/merge/push on a release branch")
     git_write = re.search(r"\bgit\b[^\n;&|]*\b(commit|merge|rebase|cherry-pick|revert|am|pull|push|reset|stash\s+pop|apply)\b", c)
     if git_write:
         for d in git_dirs(c, cwd):
             b = current_branch(d)
             if b and RELEASE_RE.search(b):
-                deny(f"Operacja git zmieniajaca historie/push na branchu release ('{b}')")
+                deny(f"Git operation changing history/push on a release branch ('{b}')")
     if re.search(r"\bgit\b[^\n;&|]*\b(update-ref|branch\s+-[fM])\b[^\n]*release", c, re.I):
-        deny("Modyfikacja brancha release")
+        deny("Modifying a release branch")
 
-    # 3. Funkcje systemowe
+    # 3. System features
     if SYSTEM_CMD_RE.search(c):
-        deny("Edycja funkcji/ustawien systemowych")
+        deny("Editing system features/settings")
     if REG_MENTION_RE.search(c) and REG_WRITE_RE.search(c):
-        deny("Modyfikacja rejestru systemu")
+        deny("Modifying the system registry")
     if destructive and any(is_system_path(p, cwd) for p in toks):
-        deny("Modyfikacja plikow w katalogach systemowych")
+        deny("Modifying files in system folders")
     if re.search(r"\bgit\s+config\b[^\n;&|]*--system\b", c):
-        deny("Zmiana systemowej konfiguracji git (git config --system)")
+        deny("Changing the system git configuration (git config --system)")
 
-    # 4. Zasoby / dyski zdalne
+    # 4. Remote resources / drives
     if mentions_remote_path(c) and destructive:
-        deny("Usuwanie/edycja danych na zasobie/dysku zdalnym")
+        deny("Deleting/editing data on a remote resource/drive")
     if REMOTE_EXEC_RE.search(c) and REMOTE_DESTRUCTIVE_RE.search(c):
-        deny("Usuwanie/edycja danych na zdalnym hoscie")
+        deny("Deleting/editing data on a remote host")
     if re.search(r"\b(scp|rsync|pscp)\b", c, re.I):
         last = toks[-1].strip("\"'") if toks else ""
         if re.match(r"^[^\\/:]+:", last) and not re.match(r"^[A-Za-z]:", last):
-            deny("Zapis danych na zdalnym hoscie (scp/rsync)")
+            deny("Writing data to a remote host (scp/rsync)")
     if re.search(r"\b(s?ftp)\b", c, re.I) and re.search(r"\b(put|mput|rm|del|delete|rmdir|rename)\b", c, re.I):
-        deny("Zapis/usuwanie danych na zdalnym hoscie (sftp/ftp)")
+        deny("Writing/deleting data on a remote host (sftp/ftp)")
     if re.search(r"\b(net\s+use\b[^\n]*/delete|Remove-PSDrive|Remove-SmbShare|Set-SmbShare)", c, re.I):
-        deny("Modyfikacja zasobow zdalnych")
+        deny("Modifying remote resources")
     if re.search(r"\bgit\s+push\b[^\n]*(--delete|\s:\S|--force|-f\b|--mirror|--prune)", c):
-        deny("Usuwanie/nadpisywanie danych w zdalnym repozytorium (push --delete/--force/--mirror)")
+        deny("Deleting/overwriting data in a remote repository (push --delete/--force/--mirror)")
 
-    # 5. Zakodowane polecenia PowerShell - dekoduj i sprawdz tresc
+    # 5. Encoded PowerShell commands - decode and check the contents
     if depth < MAX_DEPTH and re.search(r"\b(pwsh|powershell)", c, re.I):
         for m in ENCODED_RE.finditer(c):
             try:
@@ -586,62 +586,62 @@ def check_shell(cmd, cwd, depth=0, script=False):
                 continue
             check_shell(decoded, cwd, depth + 1)
 
-    # 6. Skrypty uruchamiane z plikow - sprawdz ich tresc
+    # 6. Scripts run from files - check their contents
     scan_scripts(raw, cwd, depth)
 
-    # 7. Push (zawsze reczne potwierdzenie)
+    # 7. Push (always manual confirmation)
     if is_push:
         ask("git push")
 
     if script:
-        return  # w tresci skryptow egzekwujemy tylko reguly DENY i push
+        return  # inside scripts we enforce only the DENY rules and push
 
-    # 8. Instalacja / skrypty z sieci / niejawne pobieranie pakietow
+    # 8. Installation / scripts from the web / implicit package downloads
     if PIPE_EXEC_RE.search(c):
-        ask("Wykonywanie skryptu pobranego z sieci / zakodowanego polecenia")
+        ask("Running a script downloaded from the web / an encoded command")
     if INSTALL_RE.search(c):
-        ask("Instalowanie aplikacji/pakietow z sieci")
+        ask("Installing applications/packages from the web")
     if DOTNET_IMPLICIT_RESTORE_RE.search(c) and not re.search(r"--no-restore\b", c):
-        ask("dotnet build/run/test bez --no-restore pobiera pakiety NuGet z sieci")
+        ask("dotnet build/run/test without --no-restore downloads NuGet packages from the web")
     if MSBUILD_RESTORE_RE.search(c):
-        ask("msbuild restore pobiera pakiety NuGet z sieci")
+        ask("msbuild restore downloads NuGet packages from the web")
     if BUILD_TOOL_NET_RE.search(c):
-        ask("Narzedzie pobierajace zaleznosci/obrazy z sieci (maven/gradle/docker/pip download)")
+        ask("Tool downloading dependencies/images from the web (maven/gradle/docker/pip download)")
 
-    # 9. Dane bezpieczenstwa
+    # 9. Security data
     if SECRET_CMD_RE.search(c) or any(is_secret_path(p) for p in toks):
-        ask("Dostep do danych zwiazanych z bezpieczenstwem (hasla/klucze/tokeny)")
+        ask("Access to security-related data (passwords/keys/tokens)")
 
-    # 10. Trwale zmiany srodowiska
+    # 10. Persistent environment changes
     if re.search(r"\bgit\s+config\b[^\n;&|]*(--global|core\.hooksPath|credential\.|alias\.|url\.|http\.)", c) and \
             not re.search(r"\bgit\s+config\b[^\n;&|]*\s(--get\S*|--list|-l)\b", c):
-        ask("Zmiana globalnej konfiguracji git")
+        ask("Changing the global git configuration")
     if destructive and any(PERSIST_RE.search(abs_norm(p, cwd)) for p in toks):
-        ask("Trwala zmiana srodowiska (profil powloki/autostart/konfiguracja git/hooki git)")
+        ask("Persistent environment change (shell profile/autostart/git configuration/git hooks)")
 
-    # 11. Wysylanie danych do internetu (localhost nie jest internetem)
+    # 11. Sending data to the internet (localhost is not the internet)
     urls = re.findall(r"https?://[^\s\"'<>)]+", c, re.I)
     remote_urls = [u for u in urls if not LOCAL_URL_RE.match(u)]
     net_hits = {m.group(1).lower().strip() for m in NETWORK_RE.finditer(c)}
     only_local_http = net_hits and net_hits <= HTTP_TOOLS and urls and not remote_urls
     if (net_hits and not only_local_http) or remote_urls:
-        ask("Komunikacja z siecia / wysylanie danych do internetu")
+        ask("Network communication / sending data to the internet")
     if GIT_NET_RE.search(c):
-        ask("Komunikacja git ze zdalnym repozytorium (clone/fetch/pull)")
+        ask("Git communication with a remote repository (clone/fetch/pull)")
 
-    # 12. Granica projektu (odczyt, zapis i usuwanie poza katalogiem projektu)
+    # 12. Project boundary (reading, writing and deleting outside the project folder)
     if is_outside(cwd, cwd):
-        ask(f"Polecenie uruchamiane w katalogu poza projektem ({cwd})")
+        ask(f"Command run in a folder outside the project ({cwd})")
     outside = outside_paths(cd, cwd)
     if outside:
-        ask("Dostep do sciezek poza katalogiem projektu: " + ", ".join(o[:120] for o in outside[:3]))
+        ask("Access to paths outside the project folder: " + ", ".join(o[:120] for o in outside[:3]))
     if LINK_RE.search(c):
-        ask("Tworzenie symlinku/junctiona/hardlinku (moze wyprowadzic dostep poza projekt)")
+        ask("Creating a symlink/junction/hardlink (may extend access outside the project)")
     if DESTRUCTIVE_NOREDIR_RE.search(cd) and any(BARE_VAR_RE.match(t) for t in candidate_tokens(cd)):
-        ask("Zapis/usuwanie na sciezce ze zmiennej (guard nie zna jej wartosci)")
+        ask("Writing/deleting at a path taken from a variable (guard does not know its value)")
 
 
-# ---------------------------------------------------------------- inne narzedzia
+# ---------------------------------------------------------------- other tools
 
 def check_write(ti, cwd):
     p = ti.get("file_path") or ti.get("notebook_path") or ""
@@ -650,20 +650,20 @@ def check_write(ti, cwd):
         if isinstance(e, dict):
             content += " " + str(e.get("new_string") or "")
     if is_remote_path(p):
-        deny("Edycja pliku na zasobie/dysku zdalnym")
+        deny("Editing a file on a remote resource/drive")
     if is_system_path(p, cwd):
-        deny("Edycja plikow systemowych")
+        deny("Editing system files")
     if is_protected_path(p, cwd):
-        deny("Modyfikacja zabezpieczen Claude Code (hook/ustawienia/CLAUDE.md)")
+        deny("Modifying Claude Code safeguards (hook/settings/CLAUDE.md)")
     if re.search(r"disableAllHooks|allowManagedHooksOnly", content, re.I):
-        deny("Proba wylaczenia hookow Claude Code")
+        deny("Attempt to disable Claude Code hooks")
     n = abs_norm(p, cwd)
     if PROJECT_SETTINGS_RE.search(n):
-        ask("Zmiana ustawien Claude Code w projekcie (.claude/settings*.json)")
+        ask("Changing Claude Code settings in the project (.claude/settings*.json)")
     if PERSIST_RE.search(n):
-        ask("Trwala zmiana srodowiska (profil powloki/autostart/konfiguracja git/hooki git/.mcp.json)")
+        ask("Persistent environment change (shell profile/autostart/git configuration/git hooks/.mcp.json)")
     if p and is_outside(p, cwd):
-        ask(f"Zapis poza katalogiem projektu ({p[:150]})")
+        ask(f"Writing outside the project folder ({p[:150]})")
 
 
 BROWSER_PREFIXES = ("mcp__claude_browser__", "mcp__claude-in-chrome__")
@@ -684,14 +684,14 @@ def check_browser(name, ti):
     if name in ("navigate", "preview_start"):
         url = str(ti.get("url") or "").strip()
         if not url or LOCAL_URL_RE.match(url):
-            return  # dev server z launch.json / localhost / wstecz-dalej
-        ask(f"Przegladarka: otwarcie strony zewnetrznej ({url[:120]})")
+            return  # dev server from launch.json / localhost / back-forward
+        ask(f"Browser: opening an external page ({url[:120]})")
         return
     if name == "computer":
         action = str(ti.get("action") or "")
         if action in COMPUTER_READONLY:
             return
-        ask(f"Przegladarka: akcja '{action}' (klikniecie/wpisanie moze wyslac dane lub zatwierdzic operacje)")
+        ask(f"Browser: action '{action}' (a click/typing may send data or confirm an operation)")
         return
     if name == "browser_batch":
         for a in ti.get("actions") or []:
@@ -699,31 +699,31 @@ def check_browser(name, ti):
                 check_browser(str(a.get("name") or ""), a.get("input") or {})
         return
     if name == "javascript_tool":
-        ask("Przegladarka: wykonanie JavaScriptu na stronie")
+        ask("Browser: running JavaScript on the page")
         return
-    ask(f"Przegladarka: {name} (moze wyslac dane)")
+    ask(f"Browser: {name} (may send data)")
 
 
 def check_ccd(low):
     if "permission_mode" in low:
-        deny("Zmiana trybu uprawnien sesji")
+        deny("Changing the session permission mode")
     if "move_to_cloud" in low:
-        ask("Przeniesienie sesji do chmury - tam lokalny hook guard.py nie dziala")
+        ask("Moving the session to the cloud - the local guard.py hook does not work there")
     if low.startswith("mcp__ccd_settings__") and not re.search(r"(get|read|list)", low):
-        ask("Zmiana ustawien aplikacji Claude")
+        ask("Changing Claude app settings")
     if re.search(r"(delete|trash|destroy|drop)", low):
-        deny("Trwale usuwanie danych (sesja/grupa)")
+        deny("Permanently deleting data (session/group)")
 
 
 def check_mcp(low):
     if re.search(r"(delete|trash|remove|destroy|drop)", low):
-        deny("Usuwanie danych na zasobie zdalnym (MCP)")
+        deny("Deleting data on a remote resource (MCP)")
     if re.search(r"(update|edit|modify|move|rename|overwrite)", low):
-        deny("Edycja danych na zasobie zdalnym (MCP)")
+        deny("Editing data on a remote resource (MCP)")
     if re.search(r"(create|upload|share|send|post|publish|copy|batch|write|submit|form_input|file_upload|trigger|run_)", low):
-        ask("Wysylanie danych do uslugi zewnetrznej (MCP)")
+        ask("Sending data to an external service (MCP)")
     if "download" in low:
-        ask("Pobieranie pliku z uslugi zewnetrznej (MCP)")
+        ask("Downloading a file from an external service (MCP)")
 
 
 # ---------------------------------------------------------------- main
@@ -743,25 +743,25 @@ def evaluate(data):
         p = ti.get("file_path") or ti.get("path") or ti.get("pattern") or ""
         if is_secret_path(p) or (tool == "Grep" and re.search(r"(password|passwd|secret|api[_-]?key|token|private key)",
                                                                ti.get("pattern", "") or "", re.I)):
-            ask("Odczyt danych zwiazanych z bezpieczenstwem (hasla/klucze/tokeny)")
+            ask("Reading security-related data (passwords/keys/tokens)")
         targets = [ti.get("file_path")] + [glob_base(ti.get(k) or "") for k in ("path", "pattern")
                                            if k == "path" or tool == "Glob"]
         for t in targets:
             if isinstance(t, str) and t.strip() and is_outside(t, cwd):
-                ask(f"Odczyt poza katalogiem projektu ({t[:150]})")
+                ask(f"Reading outside the project folder ({t[:150]})")
                 break
     elif tool in ("WebFetch", "WebSearch"):
-        ask("Wysylanie zapytania do internetu")
+        ask("Sending a request to the internet")
     elif tool == "Artifact":
         action = ti.get("action") or "publish"
         if action == "delete":
-            deny("Usuwanie danych na zasobie zdalnym (Artifact)")
+            deny("Deleting data on a remote resource (Artifact)")
         if action in ("publish", "pin", "unpin"):
-            ask("Publikacja/zmiana danych w internecie (Artifact)")
+            ask("Publishing/changing data on the internet (Artifact)")
     elif tool == "RemoteTrigger" or (tool == "Agent" and ti.get("isolation") == "remote"):
-        ask("Uruchamianie agenta w chmurze - tam lokalny hook guard.py nie dziala")
+        ask("Running an agent in the cloud - the local guard.py hook does not work there")
     elif tool in ("SuggestPluginInstall",):
-        ask("Instalacja pluginu (moze dodac wlasne hooki/serwery MCP)")
+        ask("Installing a plugin (may add its own hooks/MCP servers)")
     elif low.startswith(BROWSER_PREFIXES):
         check_browser(low, ti)
     elif low.startswith("mcp__ccd_"):
@@ -775,14 +775,14 @@ def main():
     try:
         data = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
         if not isinstance(data, dict):
-            raise ValueError("wejscie nie jest obiektem JSON")
+            raise ValueError("input is not a JSON object")
     except Exception as e:
-        deny(f"Nieczytelne wejscie hooka ({e}) - fail-closed")
+        deny(f"Unreadable hook input ({e}) - fail-closed")
         finish(data)
     try:
         evaluate(data)
     except Exception as e:
-        deny(f"Blad wewnetrzny guard.py ({type(e).__name__}: {e}) - fail-closed")
+        deny(f"guard.py internal error ({type(e).__name__}: {e}) - fail-closed")
     finish(data)
 
 

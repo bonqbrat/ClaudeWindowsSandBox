@@ -1,48 +1,48 @@
 <#
 .SYNOPSIS
-    Przygotowuje folder z przenosnymi narzedziami programistycznymi dla Windows Sandbox.
+    Prepares a folder with portable development tools for Windows Sandbox.
 
 .DESCRIPTION
-    Uruchamiany NA HOSCIE (nie w Sandboxie). Pobiera najnowsze wersje:
+    Run ON THE HOST (not in the Sandbox). Downloads the latest versions of:
       - Git for Windows (PortableGit)
       - Node.js LTS (zip)
       - Visual Studio Code (zip)
-      - Claude Code (pakiet npm, instalowany do osobnego prefiksu)
-      - Angular CLI (pakiet npm @angular/cli, instalowany do osobnego prefiksu - polecenie ng)
-      - Python (pakiet NuGet "python" - pelny, przenosny Python z pip i venv)
-      - .NET SDK 8 i 10 (zip; kompilator C#, runtime .NET, ASP.NET Core i Windows Desktop)
-      - Git Extensions (portable zip; graficzny klient Git)
-    i tworzy strukture folderow mapowana przez DevSandbox.wsb (folder srodowiska moze lezec w dowolnym
-    miejscu - w przykladach E:\SandBox; sciezki w DevSandbox.wsb sa dopasowywane automatycznie):
+      - Claude Code (npm package, installed into a separate prefix)
+      - Angular CLI (npm package @angular/cli, installed into a separate prefix - the ng command)
+      - Python (NuGet package "python" - a full, portable Python with pip and venv)
+      - .NET SDK 8 and 10 (zip; C# compiler, .NET runtime, ASP.NET Core and Windows Desktop)
+      - Git Extensions (portable zip; graphical Git client)
+    and creates the folder structure mapped by DevSandbox.wsb (the environment folder can be located
+    anywhere - E:\SandBox in the examples; the paths in DevSandbox.wsb are adjusted automatically):
 
       E:\SandBox\
-        DevSandbox.wsb            - konfiguracja Sandboxa (kliknij dwukrotnie, aby uruchomic)
-        Install-SandboxTools.ps1  - ten skrypt                                     (NIE jest widoczny w Sandboxie)
-        Copy-ProjectToSandbox.ps1 - klonuje projekt do Projects                    (NIE jest widoczny w Sandboxie)
-        Import-SandboxWork.ps1    - przenosi prace z Sandboxa do folderu docelowego (NIE jest widoczny w Sandboxie)
-        ProjectMap.json           - nazwa projektu -> folder docelowy              (NIE jest widoczny w Sandboxie)
-        Tools\                    - narzedzia            (w Sandboxie: C:\SandBox\Tools,    tylko do odczytu)
-        Scripts\                  - skrypty Sandboxa     (w Sandboxie: C:\SandBox\Scripts,  tylko do odczytu)
-        Settings\ClaudeCode\      - managed settings + hooki Claude Code
-                                                         (w Sandboxie: C:\Program Files\ClaudeCode, tylko do odczytu)
-        Home\                     - ustawienia, logowanie Claude, rozszerzenia VS Code
-                                                         (w Sandboxie: C:\SandBox\Home,     zapis)
-        Projects\                 - Twoje projekty       (w Sandboxie: C:\SandBox\Projects, zapis)
+        DevSandbox.wsb            - Sandbox configuration (double-click to start)
+        Install-SandboxTools.ps1  - this script                                    (NOT visible in the Sandbox)
+        Copy-ProjectToSandbox.ps1 - clones a project into Projects                 (NOT visible in the Sandbox)
+        Import-SandboxWork.ps1    - brings work from the Sandbox to the target folder (NOT visible in the Sandbox)
+        ProjectMap.json           - project name -> target folder                  (NOT visible in the Sandbox)
+        Tools\                    - tools                (in the Sandbox: C:\SandBox\Tools,    read-only)
+        Scripts\                  - Sandbox scripts      (in the Sandbox: C:\SandBox\Scripts,  read-only)
+        Settings\ClaudeCode\      - Claude Code managed settings + hooks
+                                                         (in the Sandbox: C:\Program Files\ClaudeCode, read-only)
+        Home\                     - settings, Claude login, VS Code extensions
+                                                         (in the Sandbox: C:\SandBox\Home,     writable)
+        Projects\                 - your projects        (in the Sandbox: C:\SandBox\Projects, writable)
 
 .PARAMETER Root
-    Folder srodowiska (domyslnie folder, w ktorym lezy ten skrypt).
+    Environment folder (default: the folder containing this script).
 
 .PARAMETER Force
-    Usuwa i instaluje ponownie wszystkie narzedzia (aktualizacja do najnowszych wersji).
+    Removes and reinstalls all tools (update to the latest versions).
 
 .PARAMETER PythonVersion
-    Konkretna wersja Pythona (np. 3.13.9). Domyslnie najnowsza stabilna.
+    Specific Python version (e.g. 3.13.9). Default: the latest stable.
 
 .PARAMETER AngularCliVersion
-    Wersja Angular CLI (np. 22). Domyslnie najnowsza. Globalne ng i tak uzywa wersji CLI z node_modules projektu.
+    Angular CLI version (e.g. 22). Default: the latest. The global ng uses the CLI version from the project's node_modules anyway.
 
 .PARAMETER DotnetChannels
-    Wersje .NET SDK do zainstalowania (domyslnie 8.0 i 10.0) - zawsze najnowsze wydanie z kanalu.
+    .NET SDK versions to install (default 8.0 and 10.0) - always the latest release from the channel.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File E:\SandBox\Install-SandboxTools.ps1
@@ -51,21 +51,21 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Root,     # domyslnie folder, w ktorym lezy ten skrypt
+    [string]$Root,     # defaults to the folder containing this script
     [switch]$Force,
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$PythonVersion,            # pelna wersja pakietu NuGet, np. 3.13.9
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$PythonVersion,            # full NuGet package version, e.g. 3.13.9
     [ValidatePattern('^\d+\.\d+$')][string[]]$DotnetChannels = @('8.0', '10.0'),
     [ValidatePattern('^(latest|\d+(\.\d+){0,2})$')][string]$AngularCliVersion = 'latest'
 )
 
 $ErrorActionPreference = 'Stop'
-$ProgressPreference    = 'SilentlyContinue'   # znacznie przyspiesza Invoke-WebRequest w PowerShell 5.1
-# $PSScriptRoot jako wartosc domyslna w param() jest pusty w Windows PowerShell 5.1 - ustalamy tutaj.
+$ProgressPreference    = 'SilentlyContinue'   # greatly speeds up Invoke-WebRequest in PowerShell 5.1
+# $PSScriptRoot as a default value in param() is empty in Windows PowerShell 5.1 - resolve it here.
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $Root) { $Root = $ScriptDir }
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$Tar = Join-Path $env:SystemRoot 'System32\tar.exe'   # wbudowany w Windows 10/11, szybszy niz Expand-Archive
+$Tar = Join-Path $env:SystemRoot 'System32\tar.exe'   # built into Windows 10/11, faster than Expand-Archive
 
 $Tools    = Join-Path $Root 'Tools'
 $HomeDir  = Join-Path $Root 'Home'
@@ -85,7 +85,7 @@ $GitExtDir = Join-Path $Tools 'GitExtensions'
 function Write-Step([string]$Text) { Write-Host "`n=== $Text ===" -ForegroundColor Cyan }
 
 function Get-File([string]$Url, [string]$OutFile) {
-    Write-Host "  Pobieram: $Url"
+    Write-Host "  Downloading: $Url"
     Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -Headers @{ 'User-Agent' = 'SandboxToolsInstaller' }
 }
 
@@ -95,27 +95,27 @@ function Get-Text([string]$Url) {
     $content
 }
 
-# Sprawdza skrot pobranego pliku PRZED jego rozpakowaniem/uruchomieniem; przy niezgodnosci usuwa plik.
+# Verifies the hash of a downloaded file BEFORE extracting/running it; deletes the file on mismatch.
 function Assert-FileHash([string]$Path, [string]$Expected, [string]$Algorithm, [string]$What) {
     $actual = (Get-FileHash -LiteralPath $Path -Algorithm $Algorithm).Hash
     if (-not $Expected -or $actual -ne $Expected.Trim()) {
         Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
-        throw "Niezgodna suma $Algorithm ($What) - plik uszkodzony lub podmieniony, usuniety. Oczekiwano: '$Expected', obliczono: '$actual'."
+        throw "$Algorithm hash mismatch ($What) - file corrupted or tampered with, deleted. Expected: '$Expected', computed: '$actual'."
     }
-    Write-Host "  Suma $Algorithm zgodna: $What" -ForegroundColor DarkGray
+    Write-Host "  $Algorithm hash OK: $What" -ForegroundColor DarkGray
 }
 
-# Sprawdza podpis Authenticode i wydawce pliku wykonywalnego.
+# Verifies the Authenticode signature and publisher of an executable.
 function Assert-Signature([string]$Path, [string]$PublisherPattern, [string]$What) {
     $sig = Get-AuthenticodeSignature -LiteralPath $Path
     if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch $PublisherPattern) {
-        throw "Niepoprawny podpis cyfrowy ($What): status $($sig.Status), wydawca '$($sig.SignerCertificate.Subject)'."
+        throw "Invalid digital signature ($What): status $($sig.Status), publisher '$($sig.SignerCertificate.Subject)'."
     }
-    Write-Host "  Podpis cyfrowy poprawny: $What ($($sig.SignerCertificate.GetNameInfo('SimpleName', $false)))" -ForegroundColor DarkGray
+    Write-Host "  Digital signature valid: $What ($($sig.SignerCertificate.GetNameInfo('SimpleName', $false)))" -ForegroundColor DarkGray
 }
 
-# SHA-512 pakietu NuGet (hex). Najpierw plik .sha512 z flat container, a gdy go brak -
-# pole packageHash (base64) z katalogu NuGet (registration -> catalog leaf).
+# SHA-512 of a NuGet package (hex). First the .sha512 file from the flat container, and if it is missing -
+# the packageHash field (base64) from the NuGet catalog (registration -> catalog leaf).
 function Get-NuGetPackageSha512([string]$Id, [string]$Version) {
     $b64 = $null
     try { $b64 = (Get-Text "https://api.nuget.org/v3-flatcontainer/$Id/$Version/$Id.$Version.nupkg.sha512").Trim() } catch { }
@@ -127,38 +127,38 @@ function Get-NuGetPackageSha512([string]$Id, [string]$Version) {
             if ($leaf) { $b64 = (Invoke-RestMethod $leaf.catalogEntry.'@id').packageHash; break }
         }
     }
-    if (-not $b64) { throw "Nie udalo sie pobrac sumy SHA-512 pakietu NuGet $Id $Version." }
+    if (-not $b64) { throw "Failed to get the SHA-512 hash of NuGet package $Id $Version." }
     ([BitConverter]::ToString([Convert]::FromBase64String($b64)) -replace '-', '')
 }
 
-# Najnowszy PortableGit 64-bit: { Name, Url, Sha256 }.
-# 1) API GitHub (SHA-256 z pola "digest" zasobu albo z tabeli sum w opisie wydania). Opcjonalny token
-#    w zmiennej GITHUB_TOKEN podnosi limit zapytan (bez niego: 60/h na adres IP).
-# 2) Gdy API odmowi (np. przekroczony limit): wydanie z przekierowania github.com/.../releases/latest
-#    (bez limitu API), adres pliku z nazwy wydania, SHA-256 ze strony wydania - jesli sie da.
+# Latest 64-bit PortableGit: { Name, Url, Sha256 }.
+# 1) GitHub API (SHA-256 from the asset's "digest" field or from the hash table in the release notes). An optional
+#    token in the GITHUB_TOKEN variable raises the request limit (without it: 60/h per IP address).
+# 2) When the API refuses (e.g. limit exceeded): the release from the github.com/.../releases/latest redirect
+#    (no API limit), the file URL from the release name, SHA-256 from the release page - if possible.
 function Get-PortableGitRelease {
     $headers = @{ 'User-Agent' = 'SandboxToolsInstaller' }
     if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:GITHUB_TOKEN" }
     try {
         $release = Invoke-RestMethod 'https://api.github.com/repos/git-for-windows/git/releases/latest' -Headers $headers
         $asset = $release.assets | Where-Object { $_.name -match '^PortableGit-.*-64-bit\.7z\.exe$' } | Select-Object -First 1
-        if (-not $asset) { throw 'Nie znaleziono pliku PortableGit (64-bit) w najnowszym wydaniu Git for Windows.' }
+        if (-not $asset) { throw 'PortableGit (64-bit) file not found in the latest Git for Windows release.' }
         $sha = $null
         if ($asset.digest -match '^sha256:([0-9a-fA-F]{64})$') { $sha = $Matches[1] }
         elseif ($release.body -match "$([regex]::Escape($asset.name))\s*\|\s*([0-9a-fA-F]{64})") { $sha = $Matches[1] }
         return [pscustomobject]@{ Name = $asset.name; Url = $asset.browser_download_url; Sha256 = $sha }
     } catch {
-        Write-Warning "  API GitHub niedostepne ($($_.Exception.Message.Split([Environment]::NewLine)[0])) - uzywam strony wydania."
+        Write-Warning "  GitHub API unavailable ($($_.Exception.Message.Split([Environment]::NewLine)[0])) - using the release page."
     }
 
-    # Przekierowanie /releases/latest -> /releases/tag/<tag>
+    # Redirect /releases/latest -> /releases/tag/<tag>
     $req = [System.Net.HttpWebRequest]::Create('https://github.com/git-for-windows/git/releases/latest')
     $req.AllowAutoRedirect = $false
     $req.UserAgent = 'SandboxToolsInstaller'
     $resp = $req.GetResponse()
     try { $location = $resp.Headers['Location'] } finally { $resp.Close() }
     if ($location -notmatch '/releases/tag/(v(\d+\.\d+\.\d+)\.windows\.(\d+))$') {
-        throw "Nie udalo sie ustalic najnowszego wydania Git for Windows (przekierowanie: '$location')."
+        throw "Failed to determine the latest Git for Windows release (redirect: '$location')."
     }
     $tag = $Matches[1]
     $ver = if ($Matches[3] -eq '1') { $Matches[2] } else { "$($Matches[2]).$($Matches[3])" }
@@ -176,10 +176,11 @@ function Get-PortableGitRelease {
     }
 }
 
-# Zasob najnowszego wydania GitHub pasujacy do wzorca: { Name, Url, Sha256 }.
-# 1) API GitHub (SHA-256 z pola "digest"; opcjonalny token w GITHUB_TOKEN).
-# 2) Przy odmowie API: tag z przekierowania /releases/latest, lista plikow z /releases/expanded_assets/<tag>.
-# Gdy brak "digest", SHA-256 z pliku sum wydania (np. checksums.txt), jesli podano -ChecksumAsset.
+# Asset of the latest GitHub release matching the pattern: { Name, Url, Sha256 }.
+# 1) GitHub API (SHA-256 from the "digest" field; optional token in GITHUB_TOKEN).
+# 2) When the API refuses: tag from the /releases/latest redirect, file list and SHA-256 (digest shown
+#    on the page) from /releases/expanded_assets/<tag>.
+# Without "digest", SHA-256 from the release's checksum file (e.g. checksums.txt), if -ChecksumAsset is given.
 function Get-GitHubReleaseAsset([string]$Repo, [string]$AssetPattern, [string]$ChecksumAsset) {
     $headers = @{ 'User-Agent' = 'SandboxToolsInstaller' }
     if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:GITHUB_TOKEN" }
@@ -191,21 +192,29 @@ function Get-GitHubReleaseAsset([string]$Repo, [string]$AssetPattern, [string]$C
             [pscustomobject]@{ Name = $_.name; Url = $_.browser_download_url
                                Sha256 = if ($_.digest -match '^sha256:([0-9a-fA-F]{64})$') { $Matches[1] } else { $null } } })
     } catch {
-        Write-Warning "  API GitHub niedostepne dla $Repo ($($_.Exception.Message.Split([Environment]::NewLine)[0])) - uzywam strony wydania."
+        Write-Warning "  GitHub API unavailable for $Repo ($($_.Exception.Message.Split([Environment]::NewLine)[0])) - using the release page."
         $req = [System.Net.HttpWebRequest]::Create("https://github.com/$Repo/releases/latest")
         $req.AllowAutoRedirect = $false
         $req.UserAgent = 'SandboxToolsInstaller'
         $resp = $req.GetResponse()
         try { $location = $resp.Headers['Location'] } finally { $resp.Close() }
-        if ($location -notmatch '/releases/tag/([^/?#]+)$') { throw "Nie udalo sie ustalic najnowszego wydania $Repo." }
+        if ($location -notmatch '/releases/tag/([^/?#]+)$') { throw "Failed to determine the latest release of $Repo." }
         $tag = $Matches[1]
         $html = Get-Text "https://github.com/$Repo/releases/expanded_assets/$tag"
+        # SHA-256 shown on the page: <clipboard-copy aria-label="... digest for <file>" value="sha256:<hex>">
+        $digests = @{}
+        foreach ($tag in [regex]::Matches($html, '<clipboard-copy\b[^>]*>')) {
+            $n = [regex]::Match($tag.Value, 'digest for ([^"]+)"')
+            $h = [regex]::Match($tag.Value, 'value="sha256:([0-9a-fA-F]{64})"')
+            if ($n.Success -and $h.Success) { $digests[[Net.WebUtility]::HtmlDecode($n.Groups[1].Value)] = $h.Groups[1].Value }
+        }
         $assets = @([regex]::Matches($html, "href=""(/$([regex]::Escape($Repo))/releases/download/[^""]+)""") |
             ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique | ForEach-Object {
-                [pscustomobject]@{ Name = [Uri]::UnescapeDataString(($_ -split '/')[-1]); Url = "https://github.com$_"; Sha256 = $null } })
+                $assetName = [Uri]::UnescapeDataString(($_ -split '/')[-1])
+                [pscustomobject]@{ Name = $assetName; Url = "https://github.com$_"; Sha256 = $digests[$assetName] } })
     }
     $asset = $assets | Where-Object { $_.Name -match $AssetPattern } | Select-Object -First 1
-    if (-not $asset) { throw "Nie znaleziono pliku pasujacego do '$AssetPattern' w wydaniu $tag ($Repo). Dostepne: $(($assets.Name) -join ', ')" }
+    if (-not $asset) { throw "No file matching '$AssetPattern' found in release $tag ($Repo). Available: $(($assets.Name) -join ', ')" }
     if (-not $asset.Sha256 -and $ChecksumAsset) {
         $sumAsset = $assets | Where-Object { $_.Name -eq $ChecksumAsset } | Select-Object -First 1
         if ($sumAsset) {
@@ -213,26 +222,26 @@ function Get-GitHubReleaseAsset([string]$Repo, [string]$AssetPattern, [string]$C
             if ($sums -match "(?m)^([0-9a-fA-F]{64})\s+\*?$([regex]::Escape($asset.Name))\s*$") { $asset.Sha256 = $Matches[1] }
         }
     }
-    Write-Host "  Wydanie: $tag, plik: $($asset.Name)"
+    Write-Host "  Release: $tag, file: $($asset.Name)"
     $asset
 }
 
-# Architektura pliku wykonywalnego (naglowek PE): x64, ARM64, x86.
+# Architecture of an executable (PE header): x64, ARM64, x86.
 function Get-PeMachine([string]$Path) {
     $fs = [IO.File]::OpenRead($Path)
     try {
         $br = New-Object IO.BinaryReader($fs)
         $fs.Position = 0x3C; $fs.Position = $br.ReadInt32() + 4
-        switch ($br.ReadUInt16()) { 0x8664 { 'x64' } 0xAA64 { 'ARM64' } 0x14C { 'x86' } default { 'nieznana' } }
+        switch ($br.ReadUInt16()) { 0x8664 { 'x64' } 0xAA64 { 'ARM64' } 0x14C { 'x86' } default { 'unknown' } }
     } finally { $fs.Dispose() }
 }
 
-# Rozpakowuje zip do folderu docelowego; jesli zip ma jeden folder glowny - jego zawartosc.
+# Extracts a zip into the destination folder; if the zip has a single top-level folder - its contents.
 function Expand-ToolZip([string]$Zip, [string]$Destination) {
     $extract = Join-Path $Temp ([IO.Path]::GetFileNameWithoutExtension($Zip))
     New-Item -ItemType Directory -Force -Path $extract | Out-Null
     & $Tar -xf $Zip -C $extract
-    if ($LASTEXITCODE -ne 0) { throw "Rozpakowanie $Zip nie powiodlo sie." }
+    if ($LASTEXITCODE -ne 0) { throw "Extracting $Zip failed." }
     $top = @(Get-ChildItem -LiteralPath $extract -Force)
     $src = if ($top.Count -eq 1 -and $top[0].PSIsContainer) { $top[0].FullName } else { $extract }
     New-Item -ItemType Directory -Force -Path (Split-Path $Destination) | Out-Null
@@ -242,17 +251,17 @@ function Expand-ToolZip([string]$Zip, [string]$Destination) {
 function Test-NeedsInstall([string]$Path, [string]$Name) {
     if (Test-Path $Path) {
         if (-not $Force) {
-            Write-Host "  $Name jest juz zainstalowany - pomijam (uzyj -Force, aby zaktualizowac)." -ForegroundColor DarkGray
+            Write-Host "  $Name is already installed - skipping (use -Force to update)." -ForegroundColor DarkGray
             return $false
         }
-        Write-Host "  Usuwam poprzednia wersje: $Path"
+        Write-Host "  Removing the previous version: $Path"
         Remove-Item $Path -Recurse -Force
     }
     return $true
 }
 
-# --- Struktura folderow -------------------------------------------------------
-Write-Step 'Tworze strukture folderow'
+# --- Folder structure ---------------------------------------------------------
+Write-Step 'Creating folder structure'
 foreach ($dir in $Root, $Tools, $HomeDir, $Projects, $Scripts, $Temp,
                  (Join-Path $HomeDir '.claude'),
                  (Join-Path $HomeDir 'vscode-data\user-data\User')) {
@@ -260,14 +269,14 @@ foreach ($dir in $Root, $Tools, $HomeDir, $Projects, $Scripts, $Temp,
 }
 $Root = (Resolve-Path $Root).Path.TrimEnd('\')
 
-# Skrypty z paczki zip pobranej z sieci maja znacznik "z internetu" - odblokowujemy je,
-# aby dzialaly przy zasadach wykonywania RemoteSigned. Tylko jawnie wymienione skrypty srodowiska.
+# Scripts from a zip package downloaded from the web carry the "from the internet" mark - we unblock them
+# so they work under the RemoteSigned execution policy. Only the explicitly listed environment scripts.
 @('Install-SandboxTools.ps1', 'Start-Sandbox.ps1', 'Export-SandboxWork.ps1',
   'Copy-ProjectToSandbox.ps1', 'Import-SandboxWork.ps1', 'New-SandboxPackage.ps1') |
     ForEach-Object { $p = Join-Path $Root $_; if (Test-Path -LiteralPath $p) { Unblock-File -LiteralPath $p } }
 
-# DevSandbox.wsb: sciezki folderow hosta dopasowane do lokalizacji srodowiska
-# (pozostale ustawienia, np. pamiec, zostaja bez zmian).
+# DevSandbox.wsb: host folder paths adjusted to the environment's location
+# (other settings, e.g. memory, stay unchanged).
 $wsbFile = Join-Path $Root 'DevSandbox.wsb'
 if (Test-Path $wsbFile) {
     $hostFolders = @{
@@ -284,7 +293,7 @@ if (Test-Path $wsbFile) {
     foreach ($mf in $wsb.SelectNodes('/Configuration/MappedFolders/MappedFolder')) {
         $rel = $hostFolders[$mf.SandboxFolder]
         if ($rel) {
-            # [string]: Join-Path zwraca string opakowany w PSObject, a wezly XML przyjmuja tylko czysty string.
+            # [string]: Join-Path returns a string wrapped in a PSObject, and XML nodes accept only a plain string.
             $expected = [string](Join-Path $Root $rel)
             $node = $mf.SelectSingleNode('HostFolder')
             if ($node -and $node.InnerText -ne $expected) { $node.InnerText = $expected; $changed = $true }
@@ -296,27 +305,27 @@ if (Test-Path $wsbFile) {
         $xmlSettings.OmitXmlDeclaration = $true
         $writer = [System.Xml.XmlWriter]::Create($wsbFile, $xmlSettings)
         try { $wsb.Save($writer) } finally { $writer.Close() }
-        Write-Host "  Zaktualizowano sciezki w DevSandbox.wsb -> $Root"
+        Write-Host "  Updated paths in DevSandbox.wsb -> $Root"
     }
 } else {
-    Write-Warning "Brak pliku $wsbFile."
+    Write-Warning "Missing file $wsbFile."
 }
 
-# Skrypty uruchamiane w Sandboxie: jesli leza obok tego skryptu, kopiujemy je do Scripts\
+# Scripts run in the Sandbox: if they are next to this script, copy them to Scripts\
 foreach ($name in 'Start-Sandbox.ps1', 'Export-SandboxWork.ps1') {
     $src = Join-Path $ScriptDir $name
     if ((Test-Path $src) -and ($ScriptDir -ne $Scripts)) {
         Copy-Item $src $Scripts -Force
         Unblock-File (Join-Path $Scripts $name)
-        Write-Host "  Skopiowano $name do folderu Scripts."
+        Write-Host "  Copied $name to the Scripts folder."
     }
     if (-not (Test-Path (Join-Path $Scripts $name))) {
-        Write-Warning "Brak pliku $Scripts\$name - umiesc go tam przed uruchomieniem Sandboxa."
+        Write-Warning "Missing file $Scripts\$name - put it there before starting the Sandbox."
     }
 }
 
 if (-not (Test-Path (Join-Path $Root 'Settings\ClaudeCode\managed-settings.json'))) {
-    Write-Warning "Brak $Root\Settings\ClaudeCode\managed-settings.json - Claude Code w Sandboxie bedzie dzialal bez managed settings."
+    Write-Warning "Missing $Root\Settings\ClaudeCode\managed-settings.json - Claude Code in the Sandbox will run without managed settings."
 }
 
 # --- Git (PortableGit) --------------------------------------------------------
@@ -328,25 +337,25 @@ if (Test-NeedsInstall $GitDir 'Git') {
     if ($gitInfo.Sha256) {
         Assert-FileHash $exe $gitInfo.Sha256 'SHA256' $gitInfo.Name
     } else {
-        Write-Warning "  Brak sumy SHA-256 dla $($gitInfo.Name) - pochodzenie potwierdza tylko podpis cyfrowy."
+        Write-Warning "  No SHA-256 hash for $($gitInfo.Name) - origin is confirmed only by the digital signature."
     }
-    Assert-Signature $exe 'Johannes Schindelin' $gitInfo.Name   # Git for Windows podpisuje wydania tym certyfikatem
+    Assert-Signature $exe 'Johannes Schindelin' $gitInfo.Name   # Git for Windows signs its releases with this certificate
 
-    Write-Host "  Rozpakowuje do $GitDir"
+    Write-Host "  Extracting to $GitDir"
     New-Item -ItemType Directory -Force -Path $GitDir | Out-Null
     $p = Start-Process -FilePath $exe -ArgumentList "-o`"$GitDir`"", '-y' -Wait -PassThru
-    if ($p.ExitCode -ne 0) { throw "Rozpakowanie PortableGit nie powiodlo sie (kod $($p.ExitCode))." }
+    if ($p.ExitCode -ne 0) { throw "Extracting PortableGit failed (exit code $($p.ExitCode))." }
 
-    # Konfiguracja koncowa PortableGit musi sie wykonac tutaj,
-    # bo w Sandboxie folder Tools jest tylko do odczytu.
+    # The PortableGit post-install configuration has to run here,
+    # because the Tools folder is read-only in the Sandbox.
     $postInstall = Join-Path $GitDir 'post-install.bat'
     if (Test-Path $postInstall) {
-        Write-Host '  Uruchamiam post-install PortableGit...'
+        Write-Host '  Running PortableGit post-install...'
         Start-Process -FilePath (Join-Path $GitDir 'git-bash.exe') `
                       -ArgumentList '--needs-console', '--hide', '--no-cd', '--command=post-install.bat' `
                       -WorkingDirectory $GitDir -Wait
     }
-    Write-Host "  Zainstalowano: $(& (Join-Path $GitDir 'cmd\git.exe') --version)" -ForegroundColor Green
+    Write-Host "  Installed: $(& (Join-Path $GitDir 'cmd\git.exe') --version)" -ForegroundColor Green
 }
 
 # --- Node.js LTS ---------------------------------------------------------------
@@ -354,7 +363,7 @@ Write-Step 'Node.js LTS'
 if (Test-NeedsInstall $NodeDir 'Node.js') {
     $index = Invoke-RestMethod 'https://nodejs.org/dist/index.json'
     $lts = $index | Where-Object { $_.lts -and ($_.files -contains 'win-x64-zip') } | Select-Object -First 1
-    if (-not $lts) { throw 'Nie udalo sie ustalic najnowszej wersji LTS Node.js.' }
+    if (-not $lts) { throw 'Failed to determine the latest Node.js LTS version.' }
     $ver  = $lts.version
     $name = "node-$ver-win-x64"
     $zip  = Join-Path $Temp "$name.zip"
@@ -363,29 +372,29 @@ if (Test-NeedsInstall $NodeDir 'Node.js') {
     $expected = if ($sums -match "(?m)^([0-9a-fA-F]{64})\s+$([regex]::Escape("$name.zip"))\s*$") { $Matches[1] }
     Assert-FileHash $zip $expected 'SHA256' "$name.zip"
 
-    Write-Host "  Rozpakowuje do $NodeDir"
+    Write-Host "  Extracting to $NodeDir"
     & $Tar -xf $zip -C $Temp
-    if ($LASTEXITCODE -ne 0) { throw 'Rozpakowanie Node.js nie powiodlo sie.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Extracting Node.js failed.' }
     Move-Item (Join-Path $Temp $name) $NodeDir
-    Write-Host "  Zainstalowano: Node.js $(& (Join-Path $NodeDir 'node.exe') --version)" -ForegroundColor Green
+    Write-Host "  Installed: Node.js $(& (Join-Path $NodeDir 'node.exe') --version)" -ForegroundColor Green
 }
 
 # --- Visual Studio Code (zip) --------------------------------------------------
 Write-Step 'Visual Studio Code'
 if (Test-NeedsInstall $CodeDir 'VS Code') {
-    # API aktualizacji VS Code zwraca adres paczki i jej SHA-256.
+    # The VS Code update API returns the package URL and its SHA-256.
     $meta = Invoke-RestMethod 'https://update.code.visualstudio.com/api/update/win32-x64-archive/stable/latest'
     $zip = Join-Path $Temp 'vscode.zip'
     Get-File $meta.url $zip
     Assert-FileHash $zip $meta.sha256hash 'SHA256' "VS Code $($meta.productVersion)"
 
-    Write-Host "  Rozpakowuje do $CodeDir"
+    Write-Host "  Extracting to $CodeDir"
     New-Item -ItemType Directory -Force -Path $CodeDir | Out-Null
     & $Tar -xf $zip -C $CodeDir
-    if ($LASTEXITCODE -ne 0) { throw 'Rozpakowanie VS Code nie powiodlo sie.' }
-    # Uwaga: celowo NIE tworzymy folderu VSCode\data - dane VS Code trafiaja do Home\vscode-data
-    # (zmienna VSCODE_PORTABLE ustawiana w Sandboxie), bo Tools jest tylko do odczytu.
-    Write-Host '  Zainstalowano VS Code.' -ForegroundColor Green
+    if ($LASTEXITCODE -ne 0) { throw 'Extracting VS Code failed.' }
+    # Note: we deliberately do NOT create the VSCode\data folder - VS Code data goes to Home\vscode-data
+    # (the VSCODE_PORTABLE variable is set in the Sandbox), because Tools is read-only.
+    Write-Host '  Installed VS Code.' -ForegroundColor Green
 }
 
 # --- Claude Code (npm) ---------------------------------------------------------
@@ -393,16 +402,16 @@ Write-Step 'Claude Code'
 if (Test-NeedsInstall $ClaudeDir 'Claude Code') {
     $env:Path = "$NodeDir;$env:Path"
     New-Item -ItemType Directory -Force -Path $ClaudeDir | Out-Null
-    # --ignore-scripts: zadne skrypty z pakietow npm nie sa wykonywane na hoscie.
+    # --ignore-scripts: no scripts from npm packages are run on the host.
     & (Join-Path $NodeDir 'npm.cmd') install -g '@anthropic-ai/claude-code' `
         --prefix $ClaudeDir --cache (Join-Path $Temp 'npm-cache') --ignore-scripts --no-fund --no-audit
-    if ($LASTEXITCODE -ne 0) { throw 'Instalacja Claude Code przez npm nie powiodla sie.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Installing Claude Code via npm failed.' }
 
-    # Zamiast pominietego postinstall (install.cjs): natywny claude.exe z pakietu
-    # @anthropic-ai/claude-code-win32-x64 -> bin\claude.exe, po sprawdzeniu podpisu Anthropic.
+    # Instead of the skipped postinstall (install.cjs): the native claude.exe from the package
+    # @anthropic-ai/claude-code-win32-x64 -> bin\claude.exe, after verifying the Anthropic signature.
     $native = Get-ChildItem (Join-Path $ClaudeDir 'node_modules') -Recurse -Filter 'claude.exe' -File |
               Where-Object { $_.FullName -match '\\claude-code-win32-x64\\claude\.exe$' } | Select-Object -First 1
-    if (-not $native) { throw 'Nie znaleziono natywnego claude.exe (pakiet @anthropic-ai/claude-code-win32-x64).' }
+    if (-not $native) { throw 'Native claude.exe not found (package @anthropic-ai/claude-code-win32-x64).' }
     Assert-Signature $native.FullName 'O="?Anthropic, PBC' 'claude.exe'
     $binExe = Join-Path $ClaudeDir 'node_modules\@anthropic-ai\claude-code\bin\claude.exe'
     Remove-Item -LiteralPath $binExe -Force -ErrorAction SilentlyContinue
@@ -410,7 +419,7 @@ if (Test-NeedsInstall $ClaudeDir 'Claude Code') {
     catch { Copy-Item -LiteralPath $native.FullName -Destination $binExe }
 
     $env:Path = "$ClaudeDir;$env:Path"
-    Write-Host "  Zainstalowano: $(claude --version)" -ForegroundColor Green
+    Write-Host "  Installed: $(claude --version)" -ForegroundColor Green
 }
 
 # --- Angular CLI (npm) ---------------------------------------------------------
@@ -421,15 +430,15 @@ if (Test-NeedsInstall $NgDir 'Angular CLI') {
     New-Item -ItemType Directory -Force -Path $NgDir | Out-Null
     & (Join-Path $NodeDir 'npm.cmd') install -g "@angular/cli@$AngularCliVersion" `
         --prefix $NgDir --cache (Join-Path $Temp 'npm-cache') --ignore-scripts --no-fund --no-audit
-    if ($LASTEXITCODE -ne 0) { throw 'Instalacja Angular CLI przez npm nie powiodla sie.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Installing Angular CLI via npm failed.' }
     $ngVersion = (Get-Content (Join-Path $NgDir 'node_modules\@angular\cli\package.json') -Raw | ConvertFrom-Json).version
-    Write-Host "  Zainstalowano: Angular CLI $ngVersion" -ForegroundColor Green
+    Write-Host "  Installed: Angular CLI $ngVersion" -ForegroundColor Green
 }
 
 # --- Python (NuGet) ------------------------------------------------------------
-# Pakiet NuGet "python" to pelna, przenosna dystrybucja (bez instalatora i wpisow w rejestrze).
-# Uzywany m.in. przez hook guard.py z Settings\ClaudeCode. W Sandboxie folder jest tylko do odczytu,
-# wiec pakiety instaluj w srodowiskach wirtualnych projektu (python -m venv .venv).
+# The NuGet package "python" is a full, portable distribution (no installer and no registry entries).
+# Used among others by the guard.py hook from Settings\ClaudeCode. In the Sandbox the folder is read-only,
+# so install packages in the project's virtual environments (python -m venv .venv).
 Write-Step 'Python'
 if (Test-NeedsInstall $PythonDir 'Python') {
     $ver = $PythonVersion
@@ -437,24 +446,24 @@ if (Test-NeedsInstall $PythonDir 'Python') {
         $ver = (Invoke-RestMethod 'https://api.nuget.org/v3-flatcontainer/python/index.json').versions |
                Where-Object { $_ -match '^\d+\.\d+\.\d+$' } |
                Sort-Object { [version]$_ } | Select-Object -Last 1
-        if (-not $ver) { throw 'Nie udalo sie ustalic najnowszej wersji Pythona w NuGet.' }
+        if (-not $ver) { throw 'Failed to determine the latest Python version in NuGet.' }
     }
     $pkg = Join-Path $Temp "python.$ver.zip"
     Get-File "https://api.nuget.org/v3-flatcontainer/python/$ver/python.$ver.nupkg" $pkg
     Assert-FileHash $pkg (Get-NuGetPackageSha512 'python' $ver) 'SHA512' "python.$ver.nupkg"
 
-    Write-Host "  Rozpakowuje do $PythonDir"
+    Write-Host "  Extracting to $PythonDir"
     $extract = Join-Path $Temp 'python-pkg'
     New-Item -ItemType Directory -Force -Path $extract | Out-Null
     & $Tar -xf $pkg -C $extract
-    if ($LASTEXITCODE -ne 0) { throw 'Rozpakowanie Pythona nie powiodlo sie.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Extracting Python failed.' }
     Move-Item (Join-Path $extract 'tools') $PythonDir
-    Write-Host "  Zainstalowano: $(& (Join-Path $PythonDir 'python.exe') --version)" -ForegroundColor Green
+    Write-Host "  Installed: $(& (Join-Path $PythonDir 'python.exe') --version)" -ForegroundColor Green
 }
 
 # --- .NET SDK (zip) --------------------------------------------------------------
-# Kilka SDK rozpakowanych do jednego folderu dziala obok siebie (dotnet --list-sdks).
-# Kanaly sa instalowane od najstarszego, aby wspolne pliki (dotnet.exe, host) pochodzily z najnowszego.
+# Several SDKs extracted into one folder work side by side (dotnet --list-sdks).
+# Channels are installed from the oldest, so that the shared files (dotnet.exe, host) come from the newest.
 Write-Step '.NET SDK'
 if (Test-NeedsInstall $DotnetDir '.NET SDK') {
     New-Item -ItemType Directory -Force -Path $DotnetDir | Out-Null
@@ -463,63 +472,63 @@ if (Test-NeedsInstall $DotnetDir '.NET SDK') {
         $sdkVer = $meta.'latest-sdk'
         $sdk = $meta.releases | ForEach-Object { $_.sdks } | Where-Object { $_.version -eq $sdkVer } | Select-Object -First 1
         $file = $sdk.files | Where-Object { $_.name -eq 'dotnet-sdk-win-x64.zip' } | Select-Object -First 1
-        if (-not $file) { throw "Nie znaleziono paczki .NET SDK $sdkVer (win-x64 zip) w kanale $channel." }
+        if (-not $file) { throw ".NET SDK $sdkVer package (win-x64 zip) not found in channel $channel." }
 
         $zip = Join-Path $Temp "dotnet-sdk-$sdkVer-win-x64.zip"
         Get-File $file.url $zip
         Assert-FileHash $zip $file.hash 'SHA512' ".NET SDK $sdkVer"
 
-        Write-Host "  Rozpakowuje .NET SDK $sdkVer do $DotnetDir"
+        Write-Host "  Extracting .NET SDK $sdkVer to $DotnetDir"
         & $Tar -xf $zip -C $DotnetDir
-        if ($LASTEXITCODE -ne 0) { throw "Rozpakowanie .NET SDK $sdkVer nie powiodlo sie." }
+        if ($LASTEXITCODE -ne 0) { throw "Extracting .NET SDK $sdkVer failed." }
     }
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     $env:DOTNET_NOLOGO = '1'
-    Write-Host '  Zainstalowane SDK:' -ForegroundColor Green
+    Write-Host '  Installed SDKs:' -ForegroundColor Green
     & (Join-Path $DotnetDir 'dotnet.exe') --list-sdks | ForEach-Object { Write-Host "    $_" -ForegroundColor Green }
 }
 
 # --- Git Extensions (portable zip) ------------------------------------------------
-# Graficzny klient Git. Wymaga .NET Desktop Runtime 10 - jest w Tools\dotnet (SDK 10).
+# Graphical Git client. Requires .NET Desktop Runtime 10 - it is in Tools\dotnet (SDK 10).
 Write-Step 'Git Extensions'
 if (Test-NeedsInstall $GitExtDir 'Git Extensions') {
-    # Wersja portable dla x64 (wydanie zawiera tez wersje ARM64).
+    # Portable version for x64 (the release also contains ARM64 versions).
     $a = Get-GitHubReleaseAsset 'gitextensions/gitextensions' '(?i)^(?!.*arm).*portable.*\.zip$'
-    if (-not $a.Sha256) { throw "Brak sumy SHA-256 dla $($a.Name) - przerywam (ustaw GITHUB_TOKEN, aby korzystac z API GitHub)." }
+    if (-not $a.Sha256) { throw "No SHA-256 hash for $($a.Name) - aborting (set GITHUB_TOKEN to use the GitHub API)." }
     $zip = Join-Path $Temp $a.Name
     Get-File $a.Url $zip
     Assert-FileHash $zip $a.Sha256 'SHA256' $a.Name
     Expand-ToolZip $zip $GitExtDir
     $exe = Get-ChildItem $GitExtDir -Filter 'GitExtensions.exe' -File -Recurse | Select-Object -First 1
-    if (-not $exe) { throw "W paczce $($a.Name) nie ma GitExtensions.exe." }
+    if (-not $exe) { throw "Package $($a.Name) does not contain GitExtensions.exe." }
     $arch = Get-PeMachine $exe.FullName
     if ($arch -ne 'x64') {
         Remove-Item -LiteralPath $GitExtDir -Recurse -Force
-        throw "Pobrany Git Extensions jest dla architektury $arch, a nie x64 ($($a.Name)) - usuniety."
+        throw "The downloaded Git Extensions is for the $arch architecture, not x64 ($($a.Name)) - deleted."
     }
 
-    # IsPortable=False: ustawienia w %APPDATA%\GitExtensions (w Sandboxie przekierowane do Home),
-    # bo folder programu w Tools jest w Sandboxie tylko do odczytu.
+    # IsPortable=False: settings in %APPDATA%\GitExtensions (redirected to Home in the Sandbox),
+    # because the program folder in Tools is read-only in the Sandbox.
     $cfgFile = Join-Path $exe.DirectoryName 'GitExtensions.dll.config'
     if (Test-Path -LiteralPath $cfgFile) {
         $cfg = New-Object System.Xml.XmlDocument
         $cfg.PreserveWhitespace = $true
         $cfg.Load($cfgFile)
         $node = $cfg.SelectSingleNode("//setting[@name='IsPortable']/value")
-        if ($node) { $node.InnerText = 'False'; $cfg.Save($cfgFile); Write-Host '  Ustawiono IsPortable=False (ustawienia w profilu uzytkownika).' }
-        else { Write-Warning '  Brak ustawienia IsPortable w GitExtensions.dll.config - ustawienia moga nie byc zapisywane.' }
+        if ($node) { $node.InnerText = 'False'; $cfg.Save($cfgFile); Write-Host '  Set IsPortable=False (settings in the user profile).' }
+        else { Write-Warning '  No IsPortable setting in GitExtensions.dll.config - settings may not be saved.' }
     }
     $sig = Get-AuthenticodeSignature -LiteralPath $exe.FullName
-    Write-Host "  GitExtensions.exe: podpis $($sig.Status) $($sig.SignerCertificate.Subject)" -ForegroundColor DarkGray
-    Write-Host "  Zainstalowano: Git Extensions $($exe.VersionInfo.ProductVersion)" -ForegroundColor Green
+    Write-Host "  GitExtensions.exe: signature $($sig.Status) $($sig.SignerCertificate.Subject)" -ForegroundColor DarkGray
+    Write-Host "  Installed: Git Extensions $($exe.VersionInfo.ProductVersion)" -ForegroundColor Green
 }
 
-# --- Ustawienia domyslne w Home (tylko jesli jeszcze nie istnieja) -------------
-Write-Step 'Ustawienia domyslne'
+# --- Default settings in Home (only if they do not exist yet) ------------------
+Write-Step 'Default settings'
 
-# Globalny .gitconfig dla Sandboxa (wskazywany przez GIT_CONFIG_GLOBAL).
-# safe.directory = * jest potrzebne, bo pliki w zmapowanych folderach naleza do Twojego
-# konta na hoscie, a w Sandboxie pracujesz jako WDAGUtilityAccount.
+# Global .gitconfig for the Sandbox (pointed to by GIT_CONFIG_GLOBAL).
+# safe.directory = * is needed because files in the mapped folders belong to your
+# account on the host, while in the Sandbox you work as WDAGUtilityAccount.
 $gitConfig = Join-Path $HomeDir '.gitconfig'
 if (-not (Test-Path $gitConfig)) {
     @"
@@ -530,12 +539,12 @@ if (-not (Test-Path $gitConfig)) {
 [core]
 	autocrlf = true
 "@ | Set-Content -Path $gitConfig -Encoding ASCII
-    Write-Host '  Utworzono Home\.gitconfig'
+    Write-Host '  Created Home\.gitconfig'
 }
 
-# Ustawienia VS Code: wylaczamy probe samoaktualizacji (folder programu jest tylko do odczytu).
-# claudeCode.environmentVariables: rozszerzenie Claude Code uzywa tej samej konfiguracji i historii
-# rozmow (C:\SandBox\Home\.claude) co konsola - niezaleznie od tego, jak uruchomiono VS Code.
+# VS Code settings: disable self-update attempts (the program folder is read-only).
+# claudeCode.environmentVariables: the Claude Code extension uses the same configuration and conversation
+# history (C:\SandBox\Home\.claude) as the console - regardless of how VS Code was started.
 $codeSettings = Join-Path $HomeDir 'vscode-data\user-data\User\settings.json'
 if (-not (Test-Path $codeSettings)) {
     @'
@@ -549,13 +558,13 @@ if (-not (Test-Path $codeSettings)) {
     ]
 }
 '@ | Set-Content -Path $codeSettings -Encoding UTF8
-    Write-Host '  Utworzono ustawienia VS Code'
+    Write-Host '  Created VS Code settings'
 }
 
-# --- Sprzatanie ----------------------------------------------------------------
-Write-Step 'Sprzatanie'
+# --- Cleanup -------------------------------------------------------------------
+Write-Step 'Cleanup'
 Remove-Item $Temp -Recurse -Force -ErrorAction SilentlyContinue
 
-Write-Host "`nGotowe! Uruchom Sandbox, klikajac dwukrotnie plik DevSandbox.wsb." -ForegroundColor Green
-Write-Host "Projekty klonuj skryptem: $Root\Copy-ProjectToSandbox.ps1 <sciezka-lub-URL>  (w Sandboxie: C:\SandBox\Projects)."
-Write-Host "Prace z Sandboxa przenos: 'Eksportuj zmiany' w Sandboxie, potem $Root\Import-SandboxWork.ps1 <nazwa>."
+Write-Host "`nDone! Start the Sandbox by double-clicking the DevSandbox.wsb file." -ForegroundColor Green
+Write-Host "Clone projects with: $Root\Copy-ProjectToSandbox.ps1 <path-or-URL>  (in the Sandbox: C:\SandBox\Projects)."
+Write-Host "Move work out of the Sandbox: 'Export changes' in the Sandbox, then $Root\Import-SandboxWork.ps1 <name>."
